@@ -202,6 +202,12 @@ export function Whiteboard({ username }) {
           strokesRef.current.delete(strokeId);
         }
         requestRender();
+        return;
+      }
+
+      if (message.type === "stroke:undo") {
+        strokesRef.current.delete(message.strokeId);
+        requestRender();
       }
     });
 
@@ -218,6 +224,21 @@ export function Whiteboard({ username }) {
       socketRef.current = null;
     };
   }, [requestRender, updateUsers, username]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      const key = event.key.toLowerCase();
+      const isUndo = key === "z" && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey;
+
+      if (!isUndo || activeStrokeRef.current) return;
+
+      event.preventDefault();
+      sendJson(socketRef, { type: "stroke:undo" });
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   function sendCursor(point) {
     const now = performance.now();
@@ -391,10 +412,18 @@ export function Whiteboard({ username }) {
 
   function handlePointerMove(event) {
     const canvas = canvasRef.current;
-    if (!canvas || !pointersRef.current.has(event.pointerId)) return;
+    if (!canvas) return;
+
+    const screenPoint = getCanvasPoint(canvas, event);
+
+    if (!pointersRef.current.has(event.pointerId)) {
+      if (event.pointerType === "mouse") {
+        sendCursor(screenToWorld(screenPoint, viewRef.current));
+      }
+      return;
+    }
 
     event.preventDefault();
-    const screenPoint = getCanvasPoint(canvas, event);
     pointersRef.current.set(event.pointerId, screenPoint);
 
     if (pendingTouchRef.current?.pointerId === event.pointerId) {

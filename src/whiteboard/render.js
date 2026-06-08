@@ -101,7 +101,9 @@ function drawCursor(ctx, user, view) {
   ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
+  ctx.beginPath();
+  ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 6);
+  ctx.fill();
   ctx.fillStyle = "#ffffff";
   ctx.fillText(label, labelX + paddingX, labelY + 15);
   ctx.restore();
