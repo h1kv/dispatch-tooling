@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NODE_TYPES } from "../config/nodeTypes.js";
-import type { BoardNode, BoardEdge, BoardUser, NodeTypeConfig, NodeStatus, PlanNode, PlanEdge, NodeRunTraceEvent } from "../../types/index.js";
+import type { BoardNode, BoardEdge, BoardUser, NodeTypeConfig, NodeStatus, NodeRunTraceEvent } from "../../types/index.js";
 
 function getSocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -19,17 +19,16 @@ export interface UseSocketResult {
   nodeTypes: NodeTypeConfig[];
   nodesRef: React.MutableRefObject<Map<string, BoardNode>>;
   edgesRef: React.MutableRefObject<Map<string, BoardEdge>>;
-  planNodesRef: React.MutableRefObject<Map<string, PlanNode>>;
-  planEdgesRef: React.MutableRefObject<Map<string, PlanEdge>>;
   nodeRunTraceEventsRef: React.MutableRefObject<NodeRunTraceEvent[]>;
   selfIdRef: React.MutableRefObject<string | null>;
   socketRef: React.MutableRefObject<WebSocket | null>;
   graphVersion: number;
-  planVersion: number;
   traceVersion: number;
   chainRunning: boolean;
   activeRunId: string | null;
   sendWs: (msg: unknown) => void;
+  planElements: string;
+  sendPlanUpdate: (elements: string) => void;
 }
 
 export function useSocket(username: string): UseSocketResult {
@@ -37,8 +36,6 @@ export function useSocket(username: string): UseSocketResult {
   const selfIdRef = useRef<string | null>(null);
   const nodesRef = useRef<Map<string, BoardNode>>(new Map());
   const edgesRef = useRef<Map<string, BoardEdge>>(new Map());
-  const planNodesRef = useRef<Map<string, PlanNode>>(new Map());
-  const planEdgesRef = useRef<Map<string, PlanEdge>>(new Map());
   const nodeRunTraceEventsRef = useRef<NodeRunTraceEvent[]>([]);
   const usersRef = useRef<Map<string, BoardUser>>(new Map());
 
@@ -46,10 +43,10 @@ export function useSocket(username: string): UseSocketResult {
   const [users, setUsers] = useState<Map<string, BoardUser>>(new Map());
   const [nodeTypes, setNodeTypes] = useState<NodeTypeConfig[]>(NODE_TYPES);
   const [graphVersion, setGraphVersion] = useState<number>(0);
-  const [planVersion, setPlanVersion] = useState<number>(0);
   const [traceVersion, setTraceVersion] = useState<number>(0);
   const [chainRunning, setChainRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [planElements, setPlanElements] = useState<string>("[]");
 
   useEffect(() => {
     const socket = new WebSocket(getSocketUrl());
@@ -81,18 +78,12 @@ export function useSocket(username: string): UseSocketResult {
         edgesRef.current = new Map(
           ((message.edges as BoardEdge[]) || []).map((edge) => [edge.id, edge])
         );
-        planNodesRef.current = new Map(
-          ((message.planNodes as PlanNode[]) || []).map((node) => [node.id, node])
-        );
-        planEdgesRef.current = new Map(
-          ((message.planEdges as PlanEdge[]) || []).map((edge) => [edge.id, edge])
-        );
         nodeRunTraceEventsRef.current = (message.nodeRunTraceEvents as NodeRunTraceEvent[]) || [];
         setActiveRunId((message.activeRunId as string | null) ?? null);
         setUsers(new Map(usersRef.current));
         setNodeTypes((message.nodeTypes as NodeTypeConfig[]) || NODE_TYPES);
+        setPlanElements(typeof message.planElements === "string" ? message.planElements : "[]");
         setGraphVersion((v) => v + 1);
-        setPlanVersion((v) => v + 1);
         setTraceVersion((v) => v + 1);
         return;
       }
@@ -108,7 +99,6 @@ export function useSocket(username: string): UseSocketResult {
         usersRef.current.delete(message.userId as string);
         setUsers(new Map(usersRef.current));
         setGraphVersion((v) => v + 1);
-        setPlanVersion((v) => v + 1);
         return;
       }
 
@@ -122,9 +112,7 @@ export function useSocket(username: string): UseSocketResult {
           cursorWorkspace,
         });
         setUsers(new Map(usersRef.current));
-        if (cursorWorkspace === "plan") {
-          setPlanVersion((v) => v + 1);
-        } else {
+        if (cursorWorkspace === "canvas") {
           setGraphVersion((v) => v + 1);
         }
         return;
@@ -159,32 +147,8 @@ export function useSocket(username: string): UseSocketResult {
         return;
       }
 
-      if (message.type === "plan:node:created" || message.type === "plan:node:updated") {
-        const node = message.node as PlanNode;
-        planNodesRef.current.set(node.id, node);
-        setPlanVersion((v) => v + 1);
-        return;
-      }
-
-      if (message.type === "plan:node:deleted") {
-        planNodesRef.current.delete(message.nodeId as string);
-        for (const edgeId of (message.edgeIds as string[]) ?? []) {
-          planEdgesRef.current.delete(edgeId);
-        }
-        setPlanVersion((v) => v + 1);
-        return;
-      }
-
-      if (message.type === "plan:edge:created") {
-        const edge = message.edge as PlanEdge;
-        planEdgesRef.current.set(edge.id, edge);
-        setPlanVersion((v) => v + 1);
-        return;
-      }
-
-      if (message.type === "plan:edge:deleted") {
-        planEdgesRef.current.delete(message.edgeId as string);
-        setPlanVersion((v) => v + 1);
+      if (message.type === "plan:updated") {
+        setPlanElements(typeof message.elements === "string" ? message.elements : "[]");
         return;
       }
 
@@ -270,22 +234,25 @@ export function useSocket(username: string): UseSocketResult {
     };
   }, [username]);
 
+  const sendPlanUpdate = (elements: string) => {
+    sendJson(socketRef, { type: "plan:update", elements });
+  };
+
   return {
     status,
     users,
     nodeTypes,
     nodesRef,
     edgesRef,
-    planNodesRef,
-    planEdgesRef,
     nodeRunTraceEventsRef,
     selfIdRef,
     socketRef,
     graphVersion,
-    planVersion,
     traceVersion,
     chainRunning,
     activeRunId,
     sendWs: (msg: unknown) => sendJson(socketRef, msg),
+    planElements,
+    sendPlanUpdate,
   };
 }

@@ -18,6 +18,7 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
     "@vitejs/plugin-react": "^5.0.0",
     "express": "^4.19.2",
     "react": "^19.1.0",
