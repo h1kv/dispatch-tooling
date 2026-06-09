@@ -34,17 +34,6 @@ export interface NodeRunTraceEvent {
   data?: Record<string, unknown>;
 }
 
-export type PlanNodeKind =
-  | "note"
-  | "task"
-  | "decision"
-  | "risk"
-  | "flow-step"
-  | "proposed-agent"
-  | "proposed-tool"
-  | "approval-point"
-  | "context";
-
 export interface OutputPort {
   id: string;
   label: string;
@@ -90,30 +79,6 @@ export interface BoardEdge {
   createdAt: number;
 }
 
-export interface PlanNode {
-  id: string;
-  kind: PlanNodeKind;
-  title: string;
-  body: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  createdBy: string;
-  createdAt: number;
-  data: Record<string, unknown>;
-}
-
-export interface PlanEdge {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  label: string;
-  createdBy: string;
-  createdAt: number;
-}
-
 export interface BoardUser {
   id: string;
   name: string;
@@ -136,11 +101,6 @@ export interface View {
 export interface GraphState {
   nodes: Map<string, BoardNode>;
   edges: Map<string, BoardEdge>;
-}
-
-export interface PlanGraphState {
-  nodes: Map<string, PlanNode>;
-  edges: Map<string, PlanEdge>;
 }
 
 export interface InteractionState {

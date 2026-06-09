@@ -1,7 +1,6 @@
 import { useState } from "react";
-import type { BoardNode, NodeTypeConfig, NodeStatus, PlanNode, PlanNodeKind, WorkspaceTab, NodeRunTraceEvent } from "../../types/index.js";
+import type { BoardNode, NodeTypeConfig, NodeStatus, WorkspaceTab, NodeRunTraceEvent } from "../../types/index.js";
 import { ChatPanel } from "./ChatPanel.js";
-import { PlanSidebarPanel } from "./PlanSidebarPanel.js";
 
 const PROVIDERS = ["openai", "anthropic", "google"] as const;
 const MODELS: Record<string, string[]> = {
@@ -254,10 +253,6 @@ interface SidebarProps {
   chainRunning: boolean;
   traceEvents: NodeRunTraceEvent[];
   activeRunId: string | null;
-  planNodes: PlanNode[];
-  planMode: string;
-  planPlacementKind: PlanNodeKind;
-  selectedPlanNode: PlanNode | null;
   socketRef: React.MutableRefObject<WebSocket | null>;
   onSetMode: (mode: string, typeId?: string) => void;
   onLabelChange: (label: string) => void;
@@ -265,10 +260,6 @@ interface SidebarProps {
   onNodeConfigChange: (nodeId: string, patch: Record<string, unknown>) => void;
   onApprove: () => void;
   onReject: () => void;
-  onSetPlanMode: (mode: "select" | "place" | "connect", kind?: PlanNodeKind) => void;
-  onPlanNodeUpdate: (patch: Record<string, unknown>) => void;
-  onPlanNodeDelete: () => void;
-  onPlanNodeConnect: () => void;
 }
 
 function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -547,10 +538,6 @@ export function Sidebar({
   chainRunning,
   traceEvents,
   activeRunId,
-  planNodes,
-  planMode,
-  planPlacementKind,
-  selectedPlanNode,
   socketRef,
   onSetMode,
   onLabelChange,
@@ -558,10 +545,6 @@ export function Sidebar({
   onNodeConfigChange,
   onApprove,
   onReject,
-  onSetPlanMode,
-  onPlanNodeUpdate,
-  onPlanNodeDelete,
-  onPlanNodeConnect,
 }: SidebarProps) {
   const hasChainActivity = chainNodes.some((n) => n.status !== "idle");
   const sortedChainNodes = [...chainNodes].sort((a, b) => {
@@ -588,16 +571,7 @@ export function Sidebar({
   return (
     <aside className={`vsc-sidebar${isChat ? " vsc-sidebar--chat" : ""}`} aria-label="Sidebar">
       {sidebarTab === "toolbox" && workspaceTab === "plan" && (
-        <PlanSidebarPanel
-          planNodes={planNodes}
-          selectedPlanNode={selectedPlanNode}
-          mode={planMode}
-          placementKind={planPlacementKind}
-          onSetMode={onSetPlanMode}
-          onUpdateSelected={onPlanNodeUpdate}
-          onDeleteSelected={onPlanNodeDelete}
-          onConnectSelected={onPlanNodeConnect}
-        />
+        <div className="vsc-sidebar-title">Plan Workspace</div>
       )}
 
       {sidebarTab === "toolbox" && workspaceTab === "canvas" && (

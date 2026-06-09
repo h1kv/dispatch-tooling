@@ -6,13 +6,7 @@ import { handleEdgeCreate, handleEdgeDelete } from "./handlers/edge.js";
 import { handleCursorUpdate } from "./handlers/cursor.js";
 import { handleChainRun, handleChainStop, handleReviewApprove, handleReviewReject } from "./handlers/chain.js";
 import { handleChatMessage, handleChatApply } from "./handlers/chat.js";
-import {
-  handlePlanNodeCreate,
-  handlePlanNodeUpdate,
-  handlePlanNodeDelete,
-  handlePlanEdgeCreate,
-  handlePlanEdgeDelete,
-} from "./handlers/plan.js";
+import { handlePlanUpdate } from "./handlers/plan.js";
 import { users } from "../state/store.js";
 
 export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): void {
@@ -41,11 +35,7 @@ export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): voi
     case "node:config:update": return handleNodeConfigUpdate(ws, userId, message);
     case "edge:create":        return handleEdgeCreate(ws, userId, message);
     case "edge:delete":        return handleEdgeDelete(ws, userId, message);
-    case "plan:node:create":   return handlePlanNodeCreate(ws, userId, message);
-    case "plan:node:update":   return handlePlanNodeUpdate(ws, userId, message);
-    case "plan:node:delete":   return handlePlanNodeDelete(ws, userId, message);
-    case "plan:edge:create":   return handlePlanEdgeCreate(ws, userId, message);
-    case "plan:edge:delete":   return handlePlanEdgeDelete(ws, userId, message);
+    case "plan:update":        return handlePlanUpdate(ws, { elements: typeof message.elements === "string" ? message.elements : "[]" });
     case "chain:run":          return handleChainRun(ws, userId);
     case "chain:stop":         return handleChainStop(ws, userId);
     case "review:approve":     return handleReviewApprove(ws, userId, message);
