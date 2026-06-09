@@ -1,0 +1,82 @@
+export type NodeShape = "rect";
+
+export type NodeCategory = "start" | "ai-step" | "review" | "control" | "tool" | "memory" | "context";
+
+export type NodeStatus = "idle" | "running" | "done" | "error" | "paused";
+
+export interface OutputPort {
+  id: string;
+  label: string;
+}
+
+export interface NodeTypeConfig {
+  id: string;
+  label: string;
+  description: string;
+  shape: NodeShape;
+  width: number;
+  height: number;
+  accent: string;
+  fill: string;
+  border: string;
+  text: string;
+  category: NodeCategory;
+  outputPorts: OutputPort[];
+  defaultConfig: Record<string, unknown>;
+}
+
+export interface BoardNode {
+  id: string;
+  typeId: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  createdBy: string;
+  createdAt: number;
+  config: Record<string, unknown>;
+  status: NodeStatus;
+  output: string | null;
+}
+
+export interface BoardEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  sourcePort: string;
+  createdBy: string;
+  createdAt: number;
+}
+
+export interface BoardUser {
+  id: string;
+  name: string;
+  color: string;
+  cursor: Point | null;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface View {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export interface GraphState {
+  nodes: Map<string, BoardNode>;
+  edges: Map<string, BoardEdge>;
+}
+
+export interface InteractionState {
+  selectedNodeId: string | null;
+  pendingConnectionSourceId: string | null;
+  pendingConnectionSourcePort: string | null;
+  placementPreview: (Point & { typeId: string }) | null;
+  hoverPortInfo: { nodeId: string; portId: string } | null;
+  connectionDraftTarget: Point | null;
+}

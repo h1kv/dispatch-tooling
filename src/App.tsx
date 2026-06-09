@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Whiteboard } from "./whiteboard/Whiteboard.jsx";
+import { Whiteboard } from "./whiteboard/Whiteboard.js";
 
 export default function App() {
-  const [username, setUsername] = useState("");
-  const [draftName, setDraftName] = useState("");
+  const [username, setUsername] = useState<string>("");
+  const [draftName, setDraftName] = useState<string>("");
 
-  function handleJoin(event) {
+  function handleJoin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextName = draftName.trim();
 

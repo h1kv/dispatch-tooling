@@ -1,0 +1,692 @@
+import { useState } from "react";
+import type { BoardNode, NodeTypeConfig, NodeStatus } from "../../types/index.js";
+import { ChatPanel } from "./ChatPanel.js";
+
+const PROVIDERS = ["openai", "anthropic", "google"] as const;
+const MODELS: Record<string, string[]> = {
+  openai: ["gpt-4o", "gpt-4o-mini", "o1", "o1-mini"],
+  anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
+  google: ["gemini-1.5-pro", "gemini-1.5-flash"],
+};
+
+const STATUS_ICON: Record<NodeStatus, string> = {
+  idle: "○",
+  running: "●",
+  done: "✓",
+  error: "✕",
+  paused: "⏸",
+};
+
+const STATUS_COLOR: Record<NodeStatus, string> = {
+  idle: "#a0a0a0",
+  running: "#0078d4",
+  done: "#16825d",
+  error: "#e02020",
+  paused: "#e65100",
+};
+
+function FileWriteConfig({
+  node, onConfigChange,
+}: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
+  return (
+    <>
+      <ConfigField label="File Path">
+        <input
+          className="vsc-cfg-select"
+          type="text"
+          value={(node.config?.path as string) || ""}
+          placeholder="output/result.md"
+          onChange={(e) => onConfigChange({ path: e.target.value })}
+        />
+      </ConfigField>
+      <ConfigField label="Mode">
+        <select
+          className="vsc-cfg-select"
+          value={(node.config?.mode as string) || "write"}
+          onChange={(e) => onConfigChange({ mode: e.target.value })}
+        >
+          <option value="write">Overwrite</option>
+          <option value="append">Append</option>
+        </select>
+      </ConfigField>
+    </>
+  );
+}
+
+function BranchConfig({
+  node, onConfigChange,
+}: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
+  const provider = (node.config?.provider as string) || "openai";
+  const model = (node.config?.model as string) || MODELS[provider]?.[0] || "";
+  return (
+    <>
+      <ConfigField label="Condition (natural language)">
+        <textarea
+          className="vsc-cfg-textarea"
+          rows={3}
+          value={(node.config?.condition as string) || ""}
+          placeholder="Did the previous step produce valid, working code?"
+          onChange={(e) => onConfigChange({ condition: e.target.value })}
+        />
+      </ConfigField>
+      <p className="vsc-cfg-hint">
+        The AI reads the previous node's output and answers true/false based on your condition.
+        Routes to <strong>True</strong> or <strong>False</strong> output ports.
+      </p>
+      <ConfigField label="Provider">
+        <select
+          className="vsc-cfg-select"
+          value={provider}
+          onChange={(e) => onConfigChange({ provider: e.target.value, model: MODELS[e.target.value]?.[0] || "" })}
+        >
+          {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </ConfigField>
+      <ConfigField label="Model">
+        <select
+          className="vsc-cfg-select"
+          value={model}
+          onChange={(e) => onConfigChange({ model: e.target.value })}
+        >
+          {(MODELS[provider] || []).map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </ConfigField>
+    </>
+  );
+}
+
+function ShellExecConfig({
+  node, onConfigChange,
+}: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
+  return (
+    <>
+      <ConfigField label="Command">
+        <textarea
+          className="vsc-cfg-textarea vsc-cfg-textarea--mono"
+          rows={3}
+          value={(node.config?.command as string) || ""}
+          placeholder="npm test"
+          onChange={(e) => onConfigChange({ command: e.target.value })}
+        />
+      </ConfigField>
+      <ConfigField label="Working Directory">
+        <input
+          className="vsc-cfg-select"
+          type="text"
+          value={(node.config?.workdir as string) || ""}
+          placeholder="(defaults to server cwd)"
+          onChange={(e) => onConfigChange({ workdir: e.target.value })}
+        />
+      </ConfigField>
+      <div style={{ display: "flex", gap: 8 }}>
+        <ConfigField label="Timeout (ms)">
+          <input
+            className="vsc-cfg-select"
+            type="number"
+            value={(node.config?.timeout as number) || 30000}
+            onChange={(e) => onConfigChange({ timeout: Number(e.target.value) })}
+          />
+        </ConfigField>
+        <ConfigField label="Output Format">
+          <select
+            className="vsc-cfg-select"
+            value={(node.config?.outputFormat as string) || "text"}
+            onChange={(e) => onConfigChange({ outputFormat: e.target.value })}
+          >
+            <option value="text">Text</option>
+            <option value="json">JSON</option>
+          </select>
+        </ConfigField>
+      </div>
+      <p className="vsc-cfg-hint">
+        Output includes stdout, stderr, and exitCode. Use Branch with <code>success</code> or <code>exit:0</code> to route on result.
+      </p>
+    </>
+  );
+}
+
+function ContextConfig({
+  node, onConfigChange,
+}: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
+  const sourceType = (node.config?.sourceType as string) || "text";
+
+  return (
+    <>
+      <ConfigField label="Source Type">
+        <select
+          className="vsc-cfg-select"
+          value={sourceType}
+          onChange={(e) => onConfigChange({ sourceType: e.target.value })}
+        >
+          <option value="text">Plain Text</option>
+          <option value="search">Web Search</option>
+          <option value="url">URL (fetch)</option>
+          <option value="file">File Path</option>
+        </select>
+      </ConfigField>
+
+      {sourceType === "search" && (
+        <ConfigField label="Search Query">
+          <input
+            className="vsc-cfg-select"
+            type="text"
+            value={(node.config?.searchQuery as string) || ""}
+            placeholder="React hooks best practices 2024"
+            onChange={(e) => onConfigChange({ searchQuery: e.target.value })}
+          />
+          <p className="vsc-cfg-hint">Uses Brave Search API (set BRAVE_API_KEY in .env) or DuckDuckGo fallback.</p>
+        </ConfigField>
+      )}
+
+      {sourceType === "text" && (
+        <ConfigField label="Content">
+          <textarea
+            className="vsc-cfg-textarea"
+            rows={5}
+            value={(node.config?.content as string) || ""}
+            placeholder="Paste context text here…"
+            onChange={(e) => onConfigChange({ content: e.target.value })}
+          />
+        </ConfigField>
+      )}
+      {sourceType === "url" && (
+        <ConfigField label="URL">
+          <input
+            className="vsc-cfg-select"
+            type="text"
+            value={(node.config?.url as string) || ""}
+            placeholder="https://…"
+            onChange={(e) => onConfigChange({ url: e.target.value })}
+          />
+        </ConfigField>
+      )}
+      {sourceType === "file" && (
+        <ConfigField label="File Path">
+          <input
+            className="vsc-cfg-select"
+            type="text"
+            value={(node.config?.filePath as string) || ""}
+            placeholder="/path/to/file.md"
+            onChange={(e) => onConfigChange({ filePath: e.target.value })}
+          />
+        </ConfigField>
+      )}
+
+      <ConfigField label="Assertion Notes">
+        <textarea
+          className="vsc-cfg-textarea"
+          rows={3}
+          value={(node.config?.notes as string) || ""}
+          placeholder="What is this context and why does it matter?"
+          onChange={(e) => onConfigChange({ notes: e.target.value })}
+        />
+      </ConfigField>
+
+      <div className="vsc-cfg-field vsc-cfg-field--check">
+        <label className="vsc-cfg-check-label">
+          <input
+            type="checkbox"
+            checked={Boolean(node.config?.spreadToChain)}
+            onChange={(e) => onConfigChange({ spreadToChain: e.target.checked })}
+          />
+          Spread to all downstream nodes
+        </label>
+        <p className="vsc-cfg-hint">
+          When on, context is injected into every node reachable from the connected target, not just the first.
+        </p>
+      </div>
+    </>
+  );
+}
+
+interface SidebarProps {
+  sidebarTab: string | null;
+  mode: string;
+  nodeTypes: NodeTypeConfig[];
+  placementTypeId: string;
+  pendingConnectionSourceId: string | null;
+  selectedNode: BoardNode | null;
+  selectedTypeName: string | null;
+  selectedLabelDraft: string;
+  chainNodes: BoardNode[];
+  chainRunning: boolean;
+  socketRef: React.MutableRefObject<WebSocket | null>;
+  onSetMode: (mode: string, typeId?: string) => void;
+  onLabelChange: (label: string) => void;
+  onDeleteNode: () => void;
+  onNodeConfigChange: (nodeId: string, patch: Record<string, unknown>) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}
+
+function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="vsc-cfg-field">
+      <label className="vsc-cfg-label">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const AGENT_ROLES = [
+  { value: "investigate", label: "Investigate" },
+  { value: "plan",        label: "Plan" },
+  { value: "design",      label: "Design" },
+  { value: "create",      label: "Create" },
+  { value: "evaluate",    label: "Evaluate" },
+  { value: "document",    label: "Document" },
+  { value: "custom",      label: "Custom" },
+];
+
+function AgentConfig({
+  node, onConfigChange,
+}: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
+  const role = (node.config?.role as string) || "investigate";
+  const provider = (node.config?.provider as string) || "openai";
+  const model = (node.config?.model as string) || MODELS[provider]?.[0] || "";
+  const systemPrompt = (node.config?.systemPrompt as string) || "";
+
+  return (
+    <>
+      <ConfigField label="Role">
+        <select
+          className="vsc-cfg-select"
+          value={role}
+          onChange={(e) => onConfigChange({ role: e.target.value })}
+        >
+          {AGENT_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+      </ConfigField>
+      <ConfigField label="System Prompt">
+        <textarea
+          className="vsc-cfg-textarea"
+          rows={5}
+          value={systemPrompt}
+          placeholder={role === "custom" ? "You are a…" : `Override built-in ${role} skill…`}
+          onChange={(e) => onConfigChange({ systemPrompt: e.target.value })}
+        />
+        {!systemPrompt && role !== "custom" && (
+          <p className="vsc-cfg-hint">Using built-in {role} skill. Leave blank to keep it.</p>
+        )}
+      </ConfigField>
+      <ConfigField label="Provider">
+        <select
+          className="vsc-cfg-select"
+          value={provider}
+          onChange={(e) => onConfigChange({ provider: e.target.value, model: MODELS[e.target.value]?.[0] || "" })}
+        >
+          {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </ConfigField>
+      <ConfigField label="Model">
+        <select
+          className="vsc-cfg-select"
+          value={model}
+          onChange={(e) => onConfigChange({ model: e.target.value })}
+        >
+          {(MODELS[provider] || []).map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </ConfigField>
+    </>
+  );
+}
+
+function MemoryConfig({
+  node, onConfigChange,
+}: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
+  const operation = (node.config?.operation as string) || "read";
+  const key = (node.config?.key as string) || "";
+
+  return (
+    <>
+      <ConfigField label="Operation">
+        <select
+          className="vsc-cfg-select"
+          value={operation}
+          onChange={(e) => onConfigChange({ operation: e.target.value })}
+        >
+          <option value="write">Write — store input into memory</option>
+          <option value="read">Read — output stored value</option>
+        </select>
+      </ConfigField>
+      <ConfigField label="Key">
+        <input
+          className="vsc-cfg-select"
+          type="text"
+          value={key}
+          placeholder="e.g. initial-output"
+          onChange={(e) => onConfigChange({ key: e.target.value })}
+        />
+      </ConfigField>
+      <p className="vsc-cfg-hint">
+        {operation === "write"
+          ? "Stores this node's input in memory under the key. Chain continues with same value."
+          : "Reads the stored value for this key and outputs it into the chain."}
+      </p>
+    </>
+  );
+}
+
+function StartConfig({
+  node, onConfigChange,
+}: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
+  const provider = (node.config?.defaultProvider as string) || "openai";
+  const model = (node.config?.defaultModel as string) || MODELS[provider]?.[0] || "";
+
+  return (
+    <>
+      <ConfigField label="Task Description">
+        <textarea
+          className="vsc-cfg-textarea"
+          rows={4}
+          value={(node.config?.taskDescription as string) || ""}
+          placeholder="Describe the overall goal…"
+          onChange={(e) => onConfigChange({ taskDescription: e.target.value })}
+        />
+      </ConfigField>
+      <ConfigField label="Default Provider">
+        <select
+          className="vsc-cfg-select"
+          value={provider}
+          onChange={(e) => onConfigChange({ defaultProvider: e.target.value, defaultModel: MODELS[e.target.value]?.[0] || "" })}
+        >
+          {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </ConfigField>
+      <ConfigField label="Default Model">
+        <select
+          className="vsc-cfg-select"
+          value={model}
+          onChange={(e) => onConfigChange({ defaultModel: e.target.value })}
+        >
+          {(MODELS[provider] || []).map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </ConfigField>
+    </>
+  );
+}
+
+export function Sidebar({
+  sidebarTab,
+  mode,
+  nodeTypes,
+  placementTypeId,
+  selectedNode,
+  selectedTypeName,
+  selectedLabelDraft,
+  chainNodes,
+  chainRunning,
+  socketRef,
+  onSetMode,
+  onLabelChange,
+  onDeleteNode,
+  onNodeConfigChange,
+  onApprove,
+  onReject,
+}: SidebarProps) {
+  const hasChainActivity = chainNodes.some((n) => n.status !== "idle");
+  const sortedChainNodes = [...chainNodes].sort((a, b) => {
+    const order: Record<string, number> = { running: 0, paused: 1, done: 2, error: 3, idle: 4 };
+    return (order[a.status ?? "idle"] ?? 4) - (order[b.status ?? "idle"] ?? 4);
+  });
+
+  const chainSteps = nodeTypes.filter((t) => t.category === "start" || t.category === "ai-step");
+  const controlNodes = nodeTypes.filter((t) => t.category === "review" || t.category === "control");
+  const utilityNodes = nodeTypes.filter((t) => t.category === "tool" || t.category === "memory");
+  const contextNodes = nodeTypes.filter((t) => t.category === "context");
+
+  function handleConfigChange(patch: Record<string, unknown>) {
+    if (selectedNode) onNodeConfigChange(selectedNode.id, patch);
+  }
+
+  const selectedNodeType = selectedNode ? nodeTypes.find((t) => t.id === selectedNode.typeId) : null;
+
+  const isChat = sidebarTab === "chat";
+
+  return (
+    <aside className={`vsc-sidebar${isChat ? " vsc-sidebar--chat" : ""}`} aria-label="Sidebar">
+      {sidebarTab === "toolbox" && (
+        <>
+          <div className="vsc-sidebar-title">Toolbox</div>
+
+          {/* Chain progress panel */}
+          {(chainRunning || hasChainActivity) && (
+            <>
+              <div className="vsc-section-hdr">Chain Progress</div>
+              <div className="vsc-chain-progress">
+                {sortedChainNodes.map((node) => {
+                  const s = (node.status ?? "idle") as NodeStatus;
+                  const nt = nodeTypes.find((t) => t.id === node.typeId);
+                  return (
+                    <div key={node.id} className={`vsc-chain-row vsc-chain-row--${s}`}>
+                      <span className="vsc-chain-status-icon" style={{ color: STATUS_COLOR[s] }}>
+                        {STATUS_ICON[s]}
+                      </span>
+                      <span className="vsc-chain-node-dot" style={{ background: nt?.accent ?? "#a0a0a0" }} />
+                      <span className="vsc-chain-node-label">{node.label || nt?.label || node.typeId}</span>
+                      {s === "running" && <span className="vsc-chain-running-badge">running</span>}
+                      {s === "done" && node.output && (
+                        <span className="vsc-chain-done-badge">done</span>
+                      )}
+                      {s === "error" && <span className="vsc-chain-error-badge">error</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="vsc-divider" />
+            </>
+          )}
+
+          {/* Mode buttons */}
+          <div className="vsc-section-hdr">Modes</div>
+          <div className="vsc-list">
+            <button
+              type="button"
+              className={`vsc-list-item${mode === "select" ? " active" : ""}`}
+              onClick={() => onSetMode("select")}
+            >
+              <span className="vsc-list-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M1.5 1L7 13.5l2.2-5.3L14.5 6z"/>
+                </svg>
+              </span>
+              <span className="vsc-list-label">Pointer</span>
+              <kbd className="vsc-kbd">V</kbd>
+            </button>
+            <button
+              type="button"
+              className={`vsc-list-item${mode === "connect" ? " active" : ""}`}
+              onClick={() => onSetMode("connect")}
+            >
+              <span className="vsc-list-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                  <circle cx="3.5" cy="8" r="2.2"/>
+                  <circle cx="12.5" cy="8" r="2.2"/>
+                  <line x1="5.7" y1="8" x2="10.3" y2="8"/>
+                  <polyline points="9,6.6 10.6,8 9,9.4" strokeLinejoin="round"/>
+                </svg>
+              </span>
+              <span className="vsc-list-label">Connect</span>
+              <kbd className="vsc-kbd">C</kbd>
+            </button>
+          </div>
+
+          {/* Chain steps */}
+          <div className="vsc-section-hdr">Chain Steps</div>
+          <div className="vsc-list">
+            {chainSteps.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
+                onClick={() => onSetMode("place", t.id)}
+              >
+                <span
+                  className="vsc-glyph shape-rect"
+                  style={{ borderColor: t.accent, background: `${t.accent}22` }}
+                  aria-hidden="true"
+                />
+                <span className="vsc-list-label">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Control nodes */}
+          <div className="vsc-section-hdr">Control</div>
+          <div className="vsc-list">
+            {controlNodes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
+                onClick={() => onSetMode("place", t.id)}
+              >
+                <span
+                  className="vsc-glyph shape-rect"
+                  style={{ borderColor: t.accent, background: `${t.accent}22` }}
+                  aria-hidden="true"
+                />
+                <span className="vsc-list-label">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Utility nodes */}
+          <div className="vsc-section-hdr">Utilities</div>
+          <div className="vsc-list">
+            {utilityNodes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
+                onClick={() => onSetMode("place", t.id)}
+              >
+                <span
+                  className="vsc-glyph shape-rect"
+                  style={{ borderColor: t.accent, background: `${t.accent}22` }}
+                  aria-hidden="true"
+                />
+                <span className="vsc-list-label">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Context nodes */}
+          {contextNodes.length > 0 && (
+            <>
+              <div className="vsc-section-hdr">Context</div>
+              <div className="vsc-list">
+                {contextNodes.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
+                    onClick={() => onSetMode("place", t.id)}
+                  >
+                    <span
+                      className="vsc-glyph shape-rect"
+                      style={{ borderColor: t.accent, background: `${t.accent}22` }}
+                      aria-hidden="true"
+                    />
+                    <span className="vsc-list-label">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Properties panel when node selected */}
+          {selectedNode && selectedNodeType && (
+            <>
+              <div className="vsc-divider" />
+              <div className="vsc-section-hdr">Properties</div>
+
+              {/* Label */}
+              <div className="vsc-props">
+                <div className="vsc-prop-row">
+                  <span className="vsc-prop-key">Label</span>
+                  <input
+                    className="vsc-prop-input"
+                    type="text"
+                    value={selectedLabelDraft}
+                    onChange={(e) => onLabelChange(e.target.value.slice(0, 80))}
+                  />
+                </div>
+                <div className="vsc-prop-row">
+                  <span className="vsc-prop-key">Type</span>
+                  <span className="vsc-prop-val" style={{ color: selectedNodeType.accent }}>
+                    {selectedTypeName}
+                  </span>
+                </div>
+                <div className="vsc-prop-row">
+                  <span className="vsc-prop-key">Status</span>
+                  <span className="vsc-prop-val">{selectedNode.status ?? "idle"}</span>
+                </div>
+              </div>
+
+              {/* Type-specific config */}
+              <div className="vsc-cfg-panel">
+                {selectedNodeType.id === "agent" && (
+                  <AgentConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                )}
+                {selectedNodeType.category === "start" && (
+                  <StartConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                )}
+                {selectedNodeType.id === "branch" && (
+                  <BranchConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                )}
+                {selectedNodeType.id === "file-write" && (
+                  <FileWriteConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                )}
+                {selectedNodeType.id === "shell-exec" && (
+                  <ShellExecConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                )}
+                {selectedNodeType.id === "memory" && (
+                  <MemoryConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                )}
+                {selectedNodeType.category === "context" && (
+                  <ContextConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                )}
+                {selectedNodeType.category === "review" && selectedNode.status === "paused" && (
+                  <div className="vsc-review-panel">
+                    <p className="vsc-review-msg">⏸ Chain paused — awaiting your review</p>
+                    <div className="vsc-review-actions">
+                      <button type="button" className="vsc-review-approve" onClick={onApprove}>✓ Approve</button>
+                      <button type="button" className="vsc-review-reject" onClick={onReject}>✕ Reject</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Output preview */}
+              {selectedNode.output && (
+                <>
+                  <div className="vsc-divider" />
+                  <div className="vsc-section-hdr">Output</div>
+                  <div className="vsc-output-preview">
+                    <pre className="vsc-output-text">{selectedNode.output}</pre>
+                  </div>
+                </>
+              )}
+
+              {/* Delete */}
+              <div className="vsc-divider" />
+              <button type="button" className="vsc-prop-delete" onClick={onDeleteNode}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                  <polyline points="3,4 13,4"/>
+                  <path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/>
+                  <path d="M4 4l1 9h6l1-9"/>
+                </svg>
+                Delete node
+              </button>
+            </>
+          )}
+        </>
+      )}
+
+      <div style={{ display: sidebarTab === "chat" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
+        <ChatPanel socketRef={socketRef} nodeTypes={nodeTypes} />
+      </div>
+    </aside>
+  );
+}
