@@ -140,9 +140,30 @@ function NodeProperties({
               onChange={(e) => onConfigChange({ taskPrompt: e.target.value })}
               spellCheck={false}
               placeholder={`What should ${def.label} do in this run?`}
-              rows={5}
+              rows={4}
             />
           </label>
+        )}
+
+        {/* Response output (done state) */}
+        {node.status === "done" && node.output && (
+          <div className="vsc-field">
+            <div className="vsc-response-hdr">
+              <span className="vsc-field-label" style={{ color: "#0e7540" }}>Response</span>
+              <span className="vsc-response-copy" onClick={() => navigator.clipboard?.writeText(node.output ?? "")}>
+                Copy
+              </span>
+            </div>
+            <div className="vsc-response-body">{node.output}</div>
+          </div>
+        )}
+
+        {/* Materialize output */}
+        {node.type === "materialize" && node.status === "done" && node.output && (
+          <div className="vsc-field">
+            <span className="vsc-field-label" style={{ color: "#0e7540" }}>Files Written</span>
+            <div className="vsc-response-body vsc-response-body--mono">{node.output}</div>
+          </div>
         )}
 
         {/* Error output */}
