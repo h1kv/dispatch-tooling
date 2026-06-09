@@ -122,6 +122,12 @@ export async function runChain(ctx: RunContext): Promise<void> {
   const chain = buildChain(firstNodeId);
   if (chain.length === 0) throw new Error("Chain is empty");
 
+  // Reset all chain nodes to idle before starting
+  for (const node of chain) {
+    updateNode(node.id, { status: "idle", output: null });
+    ctx.onNodeStatus(node.id, "idle", null);
+  }
+
   let flowInput = "";
 
   for (const node of chain) {
