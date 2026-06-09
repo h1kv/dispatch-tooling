@@ -172,8 +172,8 @@ export function Whiteboard({ username }: WhiteboardProps) {
       />
 
       <div className={`vsc-workspace${sidebarTab === null ? " sidebar-collapsed" : ""}`}>
-        <div className="vsc-surface-stack" style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        <div className="vsc-main-col">
+          <div className="vsc-surface-stack">
             <section
               id="canvas-panel"
               role="tabpanel"
