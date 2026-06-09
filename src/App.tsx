@@ -27,7 +27,7 @@ export default function App() {
             </svg>
           </div>
           <h1 className="join-brand">DISPATCH.AI</h1>
-          <p className="join-tagline">Agent orchestration done visually</p>
+          <p className="join-tagline">Minimal collaborative canvas</p>
         </div>
 
         <form className="join-form" onSubmit={handleJoin}>
@@ -48,8 +48,8 @@ export default function App() {
         </form>
 
         <div className="join-pills">
-          <span className="join-pill">Visual Pipelines</span>
-          <span className="join-pill">Multi-Agent</span>
+          <span className="join-pill">Initialiser Node</span>
+          <span className="join-pill">Plan Board</span>
           <span className="join-pill">Live Collaboration</span>
         </div>
       </main>

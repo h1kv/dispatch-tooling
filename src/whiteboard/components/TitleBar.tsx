@@ -3,15 +3,11 @@ import type { WorkspaceTab } from "../../types/index.js";
 interface TitleBarProps {
   status: string;
   userCount: number;
-  chainRunning: boolean;
-  runningNodeLabel: string | null;
   workspaceTab: WorkspaceTab;
-  onRun: () => void;
-  onStop: () => void;
   onWorkspaceTabChange: (tab: WorkspaceTab) => void;
 }
 
-export function TitleBar({ status, userCount, chainRunning, runningNodeLabel, workspaceTab, onRun, onStop, onWorkspaceTabChange }: TitleBarProps) {
+export function TitleBar({ status, userCount, workspaceTab, onWorkspaceTabChange }: TitleBarProps) {
   return (
     <header className="vsc-titlebar">
       <div className="vsc-titlebar-brand">
@@ -43,43 +39,9 @@ export function TitleBar({ status, userCount, chainRunning, runningNodeLabel, wo
         >
           Plan
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={workspaceTab === "skills"}
-          className={`vsc-titlebar-tab${workspaceTab === "skills" ? " active" : ""}`}
-          onClick={() => onWorkspaceTabChange("skills")}
-        >
-          Skills
-        </button>
       </div>
 
-      <div className="vsc-titlebar-center">
-        {chainRunning && runningNodeLabel && (
-          <span className="vsc-chain-chip">
-            <span className="vsc-chain-chip-dot" />
-            {runningNodeLabel}
-          </span>
-        )}
-      </div>
-
-      <div className="vsc-titlebar-actions">
-        {chainRunning ? (
-          <button type="button" className="vsc-run-btn vsc-run-btn--stop" onClick={onStop}>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-              <rect x="1" y="1" width="8" height="8" rx="1"/>
-            </svg>
-            Stop
-          </button>
-        ) : (
-          <button type="button" className="vsc-run-btn" onClick={onRun}>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-              <polygon points="2,1 9,5 2,9"/>
-            </svg>
-            Run
-          </button>
-        )}
-      </div>
+      <div className="vsc-titlebar-center" />
 
       <div className="vsc-titlebar-meta">
         <span className={`vsc-dot ${status}`} />
