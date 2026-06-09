@@ -3,6 +3,7 @@ import {
   broadcast,
   planExcalidrawData,
   send,
+  serializeEdges,
   serializeNodes,
   serializeUsers,
   users,
@@ -19,6 +20,7 @@ export function handleJoin(ws: WebSocket, userId: string, message: Record<string
     selfId: userId,
     users: serializeUsers(),
     nodes: serializeNodes(),
+    edges: serializeEdges(),
     planElements: planExcalidrawData,
   });
   broadcast({ type: "user:joined", user }, ws);

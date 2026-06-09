@@ -7,7 +7,7 @@ import { ActivityBar } from "./components/ActivityBar.js";
 import { Canvas } from "./components/Canvas.js";
 import { PlanCanvas } from "./components/PlanCanvas.js";
 import { Sidebar } from "./components/Sidebar.js";
-import type { InteractionState, View, WorkspaceTab } from "../types/index.js";
+import type { InteractionState, NodeV2Type, View, WorkspaceTab } from "../types/index.js";
 
 interface WhiteboardProps {
   username: string;
@@ -19,6 +19,9 @@ export function Whiteboard({ username }: WhiteboardProps) {
   const interactionStateRef = useRef<InteractionState>({
     selectedNodeId: null,
     placementPreview: null,
+    pendingConnectionSourceId: null,
+    pendingConnectionKind: null,
+    connectionDraftTarget: null,
   });
 
   const [sidebarTab, setSidebarTab] = useState<string | null>("toolbox");
@@ -28,9 +31,11 @@ export function Whiteboard({ username }: WhiteboardProps) {
     status,
     users,
     nodesRef,
+    edgesRef,
     selfIdRef,
     socketRef,
     graphVersion,
+    chainRunning,
     sendWs,
     planElements,
     sendPlanUpdate,
@@ -43,6 +48,7 @@ export function Whiteboard({ username }: WhiteboardProps) {
     canvasRef,
     viewRef,
     nodesRef,
+    edgesRef,
     usersRef,
     selfIdRef,
     interactionStateRef,
@@ -51,6 +57,7 @@ export function Whiteboard({ username }: WhiteboardProps) {
 
   const {
     mode,
+    placingType,
     selectedNodeId,
     selectedTitleDraft,
     zoomPercent,
@@ -61,6 +68,7 @@ export function Whiteboard({ username }: WhiteboardProps) {
     handleContextMenu,
     setBoardMode,
     updateSelectedNodeTitle,
+    updateSelectedNodeConfig,
     deleteSelectedNode,
     adjustZoom,
     resetZoom,
@@ -71,18 +79,20 @@ export function Whiteboard({ username }: WhiteboardProps) {
     canvasRef,
     viewRef,
     nodesRef,
+    edgesRef,
     socketRef,
     interactionStateRef,
     requestRender,
   });
 
   const selectedNode = selectedNodeId ? (nodesRef.current.get(selectedNodeId) ?? null) : null;
-  const hasInitialiser = nodesRef.current.size > 0;
+  const hasInitialiser = Array.from(nodesRef.current.values()).some((n) => n.type === "initialiser");
 
   const modeLabel = useMemo(() => {
-    if (mode === "place") return "Place · Initialiser";
+    if (mode === "place" && placingType) return `Place · ${placingType.charAt(0).toUpperCase() + placingType.slice(1)}`;
+    if (mode === "place") return "Place · Node";
     return "Pointer";
-  }, [mode]);
+  }, [mode, placingType]);
 
   const connectedUsers = Array.from(users.values());
 
@@ -112,11 +122,28 @@ export function Whiteboard({ username }: WhiteboardProps) {
   function deleteNodeById(nodeId: string) {
     sendWs({ type: "node:delete", nodeId });
     nodesRef.current.delete(nodeId);
+    for (const [edgeId, edge] of edgesRef.current) {
+      if (edge.sourceId === nodeId || edge.targetId === nodeId) {
+        edgesRef.current.delete(edgeId);
+      }
+    }
     if (interactionStateRef.current.selectedNodeId === nodeId) {
       interactionStateRef.current.selectedNodeId = null;
     }
     requestRender();
     closeContextMenu();
+  }
+
+  function handleRunChain() {
+    sendWs({ type: "chain:run" });
+  }
+
+  function handleStopChain() {
+    sendWs({ type: "chain:stop" });
+  }
+
+  function handlePlaceNode(type: NodeV2Type) {
+    setBoardMode("place", type);
   }
 
   return (
@@ -174,12 +201,18 @@ export function Whiteboard({ username }: WhiteboardProps) {
           workspaceTab={workspaceTab}
           sidebarTab={sidebarTab}
           mode={mode}
+          placingType={placingType}
           selectedNode={selectedNode}
           selectedTitleDraft={selectedTitleDraft}
           hasInitialiser={hasInitialiser}
+          chainRunning={chainRunning}
           onSetMode={setBoardMode}
+          onPlaceNode={handlePlaceNode}
           onTitleChange={handleTitleChange}
+          onConfigChange={updateSelectedNodeConfig}
           onDeleteNode={deleteSelectedNode}
+          onRunChain={handleRunChain}
+          onStopChain={handleStopChain}
           socketRef={socketRef}
         />
 
@@ -194,6 +227,12 @@ export function Whiteboard({ username }: WhiteboardProps) {
           </span>
           <span className="vsc-ssep" />
           <span className="vsc-sitem">{modeLabel}</span>
+          {chainRunning && (
+            <>
+              <span className="vsc-ssep" />
+              <span className="vsc-sitem" style={{ color: "#e6a817" }}>Chain running…</span>
+            </>
+          )}
         </div>
         <div className="vsc-statusbar-right">
           <span className="vsc-sitem">

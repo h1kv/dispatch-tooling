@@ -14,6 +14,7 @@ export function handleNodeCreate(_ws: WebSocket, userId: string, message: Record
     type: nodeTypeFrom(message),
     position: safePoint(message.position),
     title: message.title ?? message.label,
+    config: message.config,
     userId,
   });
   if (!node) {
@@ -26,9 +27,14 @@ export function handleNodeCreate(_ws: WebSocket, userId: string, message: Record
 
 export function handleNodeUpdate(_ws: WebSocket, userId: string, message: Record<string, unknown>): void {
   const nodeId = safeText(message.nodeId);
+  const configPatch = message.config && typeof message.config === "object" && !Array.isArray(message.config)
+    ? message.config as Record<string, unknown>
+    : undefined;
+
   const nextNode = updateNode(nodeId, {
     position: safePoint(message.position) ?? undefined,
     title: message.title ?? message.label,
+    config: configPatch as Parameters<typeof updateNode>[1]["config"],
   });
   if (!nextNode) {
     debug("node:update:invalid", { userId, nodeId });

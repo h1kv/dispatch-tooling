@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GRID_SIZE, INITIALISER_NODE_TYPE, NODE_REGISTRY } from "../../../shared/nodeRegistry.js";
+import { GRID_SIZE, NODE_REGISTRY } from "../../../shared/nodeRegistry.js";
 import { clamp, distance, findNodeAtPoint, screenToWorld, snapToGrid } from "../geometry.js";
-import type { InteractionState, NodeV2, Point, View } from "../../types/index.js";
+import { getPortWorldPosition } from "../render.js";
+import type { EdgeV2, EdgeV2Kind, InteractionState, NodeV2, NodeV2Config, NodeV2Type, Point, View } from "../../types/index.js";
+
+const FLOW_PORT_HIT_R = 10;
+const MIDPUT_PORT_HIT_R = 10;
 
 function getCanvasPoint(canvas: HTMLCanvasElement, event: { clientX: number; clientY: number }): Point {
   const rect = canvas.getBoundingClientRect();
-  return {
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top,
-  };
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 
 function getPointerPair(pointers: Map<number, Point>): [Point, Point] | null {
@@ -31,6 +32,34 @@ function createClientId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function hitTestPort(
+  node: NodeV2,
+  worldPoint: Point
+): { port: "flowIn" | "flowOut" | "midputLeft" | "midputRight"; kind: EdgeV2Kind } | null {
+  const def = NODE_REGISTRY[node.type];
+  if (!def) return null;
+
+  if (def.hasFlowIn) {
+    const p = getPortWorldPosition(node, "flowIn");
+    if (distance(worldPoint, p) <= FLOW_PORT_HIT_R) return { port: "flowIn", kind: "flow" };
+  }
+  if (def.hasFlowOut) {
+    const p = getPortWorldPosition(node, "flowOut");
+    if (distance(worldPoint, p) <= FLOW_PORT_HIT_R) return { port: "flowOut", kind: "flow" };
+  }
+  if (def.hasMidputIn) {
+    const pL = getPortWorldPosition(node, "midputLeft");
+    if (distance(worldPoint, pL) <= MIDPUT_PORT_HIT_R) return { port: "midputLeft", kind: "midput" };
+    const pR = getPortWorldPosition(node, "midputRight");
+    if (distance(worldPoint, pR) <= MIDPUT_PORT_HIT_R) return { port: "midputRight", kind: "midput" };
+  }
+  if (def.hasMidputOut) {
+    const pR = getPortWorldPosition(node, "midputRight");
+    if (distance(worldPoint, pR) <= MIDPUT_PORT_HIT_R) return { port: "midputRight", kind: "midput" };
+  }
+  return null;
+}
+
 export interface ContextMenuState {
   screenX: number;
   screenY: number;
@@ -42,6 +71,7 @@ export interface UseInteractionParams {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   viewRef: React.MutableRefObject<View>;
   nodesRef: React.MutableRefObject<Map<string, NodeV2>>;
+  edgesRef: React.MutableRefObject<Map<string, EdgeV2>>;
   socketRef: React.MutableRefObject<WebSocket | null>;
   interactionStateRef: React.MutableRefObject<InteractionState>;
   requestRender: () => void;
@@ -49,6 +79,7 @@ export interface UseInteractionParams {
 
 export interface UseInteractionResult {
   mode: string;
+  placingType: NodeV2Type | null;
   selectedNodeId: string | null;
   selectedTitleDraft: string;
   zoomPercent: number;
@@ -57,9 +88,10 @@ export interface UseInteractionResult {
   handlePointerMove: (event: React.PointerEvent<HTMLCanvasElement>) => void;
   handlePointerUp: (event: React.PointerEvent<HTMLCanvasElement>) => void;
   handleContextMenu: (event: React.MouseEvent<HTMLCanvasElement>) => void;
-  setBoardMode: (mode: string) => void;
-  createInitialiserAtCenter: () => void;
+  setBoardMode: (mode: "select" | "place", nodeType?: NodeV2Type) => void;
+  createNodeAtCenter: (type: NodeV2Type) => void;
   updateSelectedNodeTitle: (title: string) => void;
+  updateSelectedNodeConfig: (config: Partial<NodeV2Config>) => void;
   deleteSelectedNode: () => void;
   adjustZoom: (factor: number) => void;
   resetZoom: () => void;
@@ -73,12 +105,14 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     canvasRef,
     viewRef,
     nodesRef,
+    edgesRef,
     socketRef,
     interactionStateRef,
     requestRender,
   } = params;
 
   const [mode, setMode] = useState("select");
+  const [placingType, setPlacingType] = useState<NodeV2Type | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedTitleDraft, setSelectedTitleDraft] = useState("");
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -92,7 +126,9 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
   const lastCursorSentRef = useRef(0);
 
   const modeRef = useRef(mode);
+  const placingTypeRef = useRef(placingType);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { placingTypeRef.current = placingType; }, [placingType]);
 
   useEffect(() => {
     const node = selectedNodeId ? nodesRef.current.get(selectedNodeId) : null;
@@ -104,7 +140,7 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
   function closeContextMenu() { setContextMenu(null); }
 
   function hasInitialiser(): boolean {
-    return Array.from(nodesRef.current.values()).some((node) => node.type === INITIALISER_NODE_TYPE);
+    return Array.from(nodesRef.current.values()).some((node) => node.type === "initialiser");
   }
 
   const applyView = useCallback((nextView: View) => {
@@ -120,23 +156,27 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     sendJson(socketRef, { type: "cursor:update", point, workspaceTab: "canvas" });
   }
 
-  function createInitialiser(position: Point): void {
-    if (hasInitialiser()) return;
-    const definition = NODE_REGISTRY.initialiser;
+  function createNode(type: NodeV2Type, position: Point): void {
+    if (type === "initialiser" && hasInitialiser()) return;
+    const definition = NODE_REGISTRY[type];
+    if (!definition) return;
     const nodeId = createClientId("node");
-    const snapped = snapToGrid({
-      x: position.x - definition.width / 2,
-      y: position.y - definition.height / 2,
-    }, GRID_SIZE);
+    const snapped = snapToGrid(
+      { x: position.x - definition.width / 2, y: position.y - definition.height / 2 },
+      GRID_SIZE
+    );
     const now = Date.now();
     const node: NodeV2 = {
       id: nodeId,
-      type: INITIALISER_NODE_TYPE,
+      type,
       title: definition.defaultTitle,
       x: snapped.x,
       y: snapped.y,
       width: definition.width,
       height: definition.height,
+      config: { ...definition.defaultConfig },
+      status: "idle",
+      output: null,
       createdBy: "local",
       createdAt: now,
       updatedAt: now,
@@ -144,21 +184,27 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     nodesRef.current.set(node.id, node);
     setSelectedNodeId(node.id);
     setMode("select");
-    interactionStateRef.current = { ...interactionStateRef.current, placementPreview: null };
+    setPlacingType(null);
+    interactionStateRef.current = {
+      ...interactionStateRef.current,
+      placementPreview: null,
+      selectedNodeId: node.id,
+    };
     requestRender();
     sendJson(socketRef, {
       type: "node:create",
       nodeId,
-      nodeType: INITIALISER_NODE_TYPE,
+      nodeType: type,
       position: snapped,
       title: definition.defaultTitle,
+      config: definition.defaultConfig,
     });
   }
 
-  function createInitialiserAtCenter(): void {
+  function createNodeAtCenter(type: NodeV2Type): void {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    createInitialiser(screenToWorld({ x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 }, viewRef.current));
+    createNode(type, screenToWorld({ x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 }, viewRef.current));
   }
 
   function updateSelectedNodeTitle(title: string): void {
@@ -172,9 +218,24 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     sendJson(socketRef, { type: "node:update", nodeId: node.id, title });
   }
 
+  function updateSelectedNodeConfig(config: Partial<NodeV2Config>): void {
+    if (!selectedNodeId) return;
+    const node = nodesRef.current.get(selectedNodeId);
+    if (!node) return;
+    const next = { ...node, config: { ...node.config, ...config }, updatedAt: Date.now() };
+    nodesRef.current.set(node.id, next);
+    requestRender();
+    sendJson(socketRef, { type: "node:update", nodeId: node.id, config });
+  }
+
   function deleteSelectedNode(): void {
     if (!selectedNodeId) return;
     nodesRef.current.delete(selectedNodeId);
+    for (const [edgeId, edge] of edgesRef.current) {
+      if (edge.sourceId === selectedNodeId || edge.targetId === selectedNodeId) {
+        edgesRef.current.delete(edgeId);
+      }
+    }
     sendJson(socketRef, { type: "node:delete", nodeId: selectedNodeId });
     setSelectedNodeId(null);
     requestRender();
@@ -185,10 +246,10 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     if (!dragging) return;
     const node = nodesRef.current.get(dragging.nodeId);
     if (!node) return;
-    const position = snapToGrid({
-      x: worldPoint.x - dragging.offset.x,
-      y: worldPoint.y - dragging.offset.y,
-    }, GRID_SIZE);
+    const position = snapToGrid(
+      { x: worldPoint.x - dragging.offset.x, y: worldPoint.y - dragging.offset.y },
+      GRID_SIZE
+    );
     nodesRef.current.set(node.id, { ...node, x: position.x, y: position.y, updatedAt: Date.now() });
     requestRender();
     sendJson(socketRef, { type: "node:update", nodeId: node.id, position });
@@ -237,13 +298,48 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     });
   }
 
-  function setBoardMode(nextMode: string): void {
-    if (nextMode === "place" && hasInitialiser()) return;
-    setMode(nextMode);
-    if (nextMode !== "place") {
+  function setBoardMode(nextMode: "select" | "place", nodeType?: NodeV2Type): void {
+    if (nextMode === "place") {
+      const type = nodeType ?? "initialiser";
+      if (type === "initialiser" && hasInitialiser()) return;
+      setMode("place");
+      setPlacingType(type);
+    } else {
+      setMode("select");
+      setPlacingType(null);
       interactionStateRef.current = { ...interactionStateRef.current, placementPreview: null };
       requestRender();
     }
+  }
+
+  function cancelConnection(): void {
+    interactionStateRef.current = {
+      ...interactionStateRef.current,
+      pendingConnectionSourceId: null,
+      pendingConnectionKind: null,
+      connectionDraftTarget: null,
+    };
+    requestRender();
+  }
+
+  function completeConnection(targetNodeId: string, kind: EdgeV2Kind): void {
+    const sourceId = interactionStateRef.current.pendingConnectionSourceId;
+    if (!sourceId || sourceId === targetNodeId) {
+      cancelConnection();
+      return;
+    }
+    const edgeId = createClientId("edge");
+    const edge: EdgeV2 = {
+      id: edgeId,
+      sourceId,
+      targetId: targetNodeId,
+      kind,
+      createdBy: "local",
+      createdAt: Date.now(),
+    };
+    edgesRef.current.set(edgeId, edge);
+    cancelConnection();
+    sendJson(socketRef, { type: "edge:create", edgeId, sourceId, targetId: targetNodeId, kind });
   }
 
   function handleContextMenu(event: React.MouseEvent<HTMLCanvasElement>): void {
@@ -266,7 +362,6 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
 
     const screenPoint = getCanvasPoint(canvas, event);
     const worldPoint = screenToWorld(screenPoint, viewRef.current);
-    const hitNode = findNodeAtPoint(worldPoint, nodesRef.current);
     sendCursor(worldPoint);
 
     event.preventDefault();
@@ -280,8 +375,43 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
       return;
     }
 
+    // If a connection is pending, cancel on canvas click
+    if (interactionStateRef.current.pendingConnectionSourceId) {
+      const hitNode = findNodeAtPoint(worldPoint, nodesRef.current);
+      if (hitNode) {
+        const portHit = hitTestPort(hitNode, worldPoint);
+        if (portHit) {
+          const kind = interactionStateRef.current.pendingConnectionKind!;
+          if (portHit.kind === kind) {
+            completeConnection(hitNode.id, kind);
+            return;
+          }
+        }
+      }
+      cancelConnection();
+      return;
+    }
+
+    const hitNode = findNodeAtPoint(worldPoint, nodesRef.current);
+
+    // Port hit on a node → begin connection drag
+    if (hitNode) {
+      const portHit = hitTestPort(hitNode, worldPoint);
+      if (portHit && (portHit.port === "flowOut" || portHit.port === "midputRight")) {
+        interactionStateRef.current = {
+          ...interactionStateRef.current,
+          pendingConnectionSourceId: hitNode.id,
+          pendingConnectionKind: portHit.kind,
+          connectionDraftTarget: worldPoint,
+        };
+        requestRender();
+        return;
+      }
+    }
+
     if (modeRef.current === "place" && !hitNode) {
-      createInitialiser(worldPoint);
+      const type = placingTypeRef.current ?? "initialiser";
+      createNode(type, worldPoint);
       return;
     }
 
@@ -305,15 +435,25 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     const screenPoint = getCanvasPoint(canvas, event);
     const worldPoint = screenToWorld(screenPoint, viewRef.current);
 
-    if (modeRef.current === "place" && !hasInitialiser()) {
-      const definition = NODE_REGISTRY.initialiser;
-      interactionStateRef.current = {
-        ...interactionStateRef.current,
-        placementPreview: {
-          type: INITIALISER_NODE_TYPE,
-          ...snapToGrid({ x: worldPoint.x - definition.width / 2, y: worldPoint.y - definition.height / 2 }, GRID_SIZE),
-        },
-      };
+    // Update placement preview
+    if (modeRef.current === "place" && placingTypeRef.current) {
+      const type = placingTypeRef.current;
+      const definition = NODE_REGISTRY[type];
+      if (definition) {
+        interactionStateRef.current = {
+          ...interactionStateRef.current,
+          placementPreview: {
+            type,
+            ...snapToGrid({ x: worldPoint.x - definition.width / 2, y: worldPoint.y - definition.height / 2 }, GRID_SIZE),
+          },
+        };
+      }
+    }
+
+    // Update connection draft
+    if (interactionStateRef.current.pendingConnectionSourceId) {
+      interactionStateRef.current = { ...interactionStateRef.current, connectionDraftTarget: worldPoint };
+      requestRender();
     }
 
     if (!pointersRef.current.has(event.pointerId)) {
@@ -351,6 +491,26 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
 
   function handlePointerUp(event: React.PointerEvent<HTMLCanvasElement>): void {
     if (!enabled) return;
+
+    // Complete connection if dragged onto a port
+    if (interactionStateRef.current.pendingConnectionSourceId) {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const screenPoint = getCanvasPoint(canvas, event);
+        const worldPoint = screenToWorld(screenPoint, viewRef.current);
+        const hitNode = findNodeAtPoint(worldPoint, nodesRef.current);
+        if (hitNode && hitNode.id !== interactionStateRef.current.pendingConnectionSourceId) {
+          const portHit = hitTestPort(hitNode, worldPoint);
+          if (portHit && portHit.kind === interactionStateRef.current.pendingConnectionKind) {
+            completeConnection(hitNode.id, portHit.kind);
+            pointersRef.current.delete(event.pointerId);
+            return;
+          }
+        }
+      }
+      cancelConnection();
+    }
+
     if (panRef.current?.pointerId === event.pointerId) panRef.current = null;
     nodeDragRef.current = null;
     pointersRef.current.delete(event.pointerId);
@@ -415,9 +575,7 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
       });
     }
 
-    function handleGestureEnd() {
-      gestureRef.current = null;
-    }
+    function handleGestureEnd() { gestureRef.current = null; }
 
     canvas.addEventListener("gesturestart", handleGestureStart);
     canvas.addEventListener("gesturechange", handleGestureChange);
@@ -436,7 +594,9 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
       const editing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
       if (editing) return;
       if (event.key === "Escape") {
+        cancelConnection();
         setMode("select");
+        setPlacingType(null);
         interactionStateRef.current = { ...interactionStateRef.current, placementPreview: null };
         requestRender();
       }
@@ -448,6 +608,7 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
 
   return {
     mode,
+    placingType,
     selectedNodeId,
     selectedTitleDraft,
     zoomPercent,
@@ -457,8 +618,9 @@ export function useInteraction(params: UseInteractionParams): UseInteractionResu
     handlePointerUp,
     handleContextMenu,
     setBoardMode,
-    createInitialiserAtCenter,
+    createNodeAtCenter,
     updateSelectedNodeTitle,
+    updateSelectedNodeConfig,
     deleteSelectedNode,
     adjustZoom,
     resetZoom,

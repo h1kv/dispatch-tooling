@@ -477,28 +477,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border-radius: 1.5px;
 }
 
-.vsc-glyph.shape-rect { border-radius: 2px; }
-
-.vsc-glyph.shape-diamond {
-  transform: rotate(45deg);
-  width: 9px;
-  height: 9px;
-  border-radius: 1px;
-}
-
 .vsc-glyph.shape-terminator {
   border-radius: 999px;
   width: 15px;
-}
-
-.vsc-glyph.shape-parallelogram {
-  transform: skewX(-18deg);
-  border-radius: 0;
-}
-
-.vsc-glyph.shape-note {
-  clip-path: polygon(0 0, 70% 0, 100% 30%, 100% 100%, 0 100%);
-  border-radius: 0;
 }
 
 /* ── Properties ──────────────────────────────────── */
@@ -621,8 +602,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 .vsc-canvas.mode-place   { cursor: crosshair; }
-.vsc-canvas.mode-connect { cursor: cell; }
-
 /* Canvas hint */
 .vsc-hint {
   position: absolute;
@@ -700,46 +679,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .vsc-zoom-btn:not(:last-child) {
   border-bottom: 1px solid var(--bd);
-}
-
-.plan-toolbar {
-  position: absolute;
-  top: 44px;
-  left: 10px;
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid var(--bd);
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-}
-
-.plan-tool-btn {
-  height: 24px;
-  padding: 0 9px;
-  border-radius: 3px;
-  color: var(--fg-m);
-  font-size: 12px;
-}
-
-.plan-tool-btn:hover {
-  background: var(--hov);
-  color: var(--fg);
-}
-
-.plan-tool-btn.active {
-  background: var(--sel);
-  color: var(--fg);
-}
-
-.plan-sidebar-copy,
-.plan-summary {
-  padding: 4px 12px 8px 22px;
-  margin: 0;
-  color: var(--fg-m);
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 /* ── Status bar ──────────────────────────────────── */
@@ -872,24 +811,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   margin: 3px 0;
 }
 
-/* ── Context node toolbox glyph ─────────────────── */
-.vsc-glyph--context {
-  border-radius: 2px;
-  position: relative;
-}
-.vsc-glyph--context::after {
-  content: "";
-  position: absolute;
-  right: -5px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.6;
-}
-
 .vsc-list-badge {
   margin-left: auto;
   font-size: 9px;
@@ -898,21 +819,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   letter-spacing: 0.05em;
   opacity: 0.7;
   flex-shrink: 0;
-}
-
-.vsc-cfg-hint {
-  font-size: 11px;
-  color: var(--fg-m);
-  margin: 0;
-  line-height: 1.5;
-}
-
-.vsc-cfg-hint code {
-  font-family: ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Code", "Fira Code", monospace;
-  font-size: 10px;
-  background: var(--bd);
-  padding: 1px 4px;
-  border-radius: 2px;
 }
 
 /* ── Chat Panel ─────────────────────────────────── */

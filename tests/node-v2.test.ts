@@ -116,7 +116,7 @@ test("workspace snapshot persists v2 nodes and plan elements", () => {
   assert.equal(snapshot.planElements, '[{"id":"plan-1"}]');
 });
 
-test("init payload sends Node V2 workspace without legacy catalog or edges", () => {
+test("init payload sends Node V2 workspace with nodes and edges (no legacy fields)", () => {
   const ws = fakeWs();
   users.set("user_1", {
     id: "user_1",
@@ -136,8 +136,8 @@ test("init payload sends Node V2 workspace without legacy catalog or edges", () 
   const init = ws.sent[0] as Record<string, unknown>;
   assert.equal(init.type, "init");
   assert.equal(Array.isArray(init.nodes), true);
+  assert.equal(Array.isArray(init.edges), true);
   assert.equal(init.planElements, '[{"id":"plan-1"}]');
-  assert.equal("edges" in init, false);
   assert.equal("nodeTypes" in init, false);
   assert.equal("planNodes" in init, false);
   assert.equal("planEdges" in init, false);

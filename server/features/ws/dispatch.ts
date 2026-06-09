@@ -4,6 +4,8 @@ import { users } from "../state/store.js";
 import { handleCursorUpdate } from "./handlers/cursor.js";
 import { handleJoin } from "./handlers/join.js";
 import { handleNodeCreate, handleNodeDelete, handleNodeUpdate } from "./handlers/node.js";
+import { handleEdgeCreate, handleEdgeDelete } from "./handlers/edge.js";
+import { handleChainRun, handleChainStop } from "./handlers/chain.js";
 import { handlePlanUpdate } from "./handlers/plan.js";
 import { handleChatMessage } from "./handlers/chat.js";
 
@@ -30,6 +32,10 @@ export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): voi
     case "node:create":   return handleNodeCreate(ws, userId, message);
     case "node:update":   return handleNodeUpdate(ws, userId, message);
     case "node:delete":   return handleNodeDelete(ws, userId, message);
+    case "edge:create":   return handleEdgeCreate(ws, userId, message);
+    case "edge:delete":   return handleEdgeDelete(ws, userId, message);
+    case "chain:run":     return handleChainRun(ws, userId, message);
+    case "chain:stop":    return handleChainStop(ws, userId, message);
     case "plan:update":   return handlePlanUpdate(ws, message);
     case "chat:message":  void handleChatMessage(ws, userId, message); return;
     default:

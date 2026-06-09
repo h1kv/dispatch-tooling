@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import { renderBoard } from "../render.js";
-import type { BoardUser, InteractionState, NodeV2, View } from "../../types/index.js";
+import type { BoardUser, EdgeV2, InteractionState, NodeV2, View } from "../../types/index.js";
 
 export interface UseRenderParams {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   viewRef: React.MutableRefObject<View>;
   nodesRef: React.MutableRefObject<Map<string, NodeV2>>;
+  edgesRef: React.MutableRefObject<Map<string, EdgeV2>>;
   usersRef: React.MutableRefObject<Map<string, BoardUser>>;
   selfIdRef: React.MutableRefObject<string | null>;
   interactionStateRef: React.MutableRefObject<InteractionState>;
@@ -13,7 +14,7 @@ export interface UseRenderParams {
 }
 
 export function useRender(params: UseRenderParams): { requestRender: () => void } {
-  const { canvasRef, viewRef, nodesRef, usersRef, selfIdRef, interactionStateRef, graphVersion } = params;
+  const { canvasRef, viewRef, nodesRef, edgesRef, usersRef, selfIdRef, interactionStateRef, graphVersion } = params;
   const rafRef = useRef<number | null>(null);
 
   const requestRender = useCallback(() => {
@@ -30,11 +31,11 @@ export function useRender(params: UseRenderParams): { requestRender: () => void 
         viewRef.current,
         usersRef.current,
         selfIdRef.current,
-        { nodes: nodesRef.current },
+        { nodes: nodesRef.current, edges: edgesRef.current },
         interactionStateRef.current
       );
     });
-  }, [canvasRef, viewRef, nodesRef, usersRef, selfIdRef, interactionStateRef]);
+  }, [canvasRef, viewRef, nodesRef, edgesRef, usersRef, selfIdRef, interactionStateRef]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
