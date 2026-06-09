@@ -187,6 +187,39 @@ server → client: plan:updated { elements: string }
 
 ---
 
+## Post-Merge Bug Fix — server/features/ Sync Issue
+
+**Commit:** `c3b0202`
+
+### Root Cause
+
+Phase 3 (folder restructure) ran in a parallel worktree concurrently with Phase 1+2 (Responses API + skill loader). Phase 3 agent **copied the old engine/provider code** into `server/features/` BEFORE the Phase 1+2 changes were committed anywhere. When all branches were merged into `feat-2v`, the Phase 1+2 changes landed in the **old paths** (`server/execution/`), but the running server uses the **new paths** (`server/features/execution/`). Result: the server was running code with neither the Responses API nor the file-based skill loader.
+
+### Symptoms
+- Investigate node trace showed: `web_search → "No instant answers found for: ..."` (DuckDuckGo fallback)
+- Final output was a generic markdown template, not real research with cited URLs
+
+### Fix (3 files in server/features/)
+
+**`server/features/execution/providers/openai.ts`**
+- Added `callOpenAIResponses()` function using `POST /v1/responses` with `web_search_preview` built-in tool
+- The old file only had `callOpenAI` (Chat Completions) and `callOpenAIToolRound`
+
+**`server/features/skills/loader.ts`**
+- Was: `export { NODE_SKILLS } from "./index.js"` — just re-exporting the inline string map
+- Now: reads `skills/_base.md` and `skills/{role}.md` from disk using `readFileSync`, caches, returns combined prompt via `getSkillPrompt(role)`. Falls back to `NODE_SKILLS[role]` if file not found.
+
+**`server/features/execution/engine.ts`**
+- Changed import: `callOpenAIResponses` added from providers
+- Changed import: `getSkillPrompt` from features skill loader (replacing `NODE_SKILLS` direct access)
+- In `callAIWithTools`: added branch — if `allowedTools.includes("web_search")`, route to `callOpenAIResponses()` instead of Chat Completions + DuckDuckGo
+- In `buildSystemPrompt`: replaced `NODE_SKILLS[role] || ""` with `getSkillPrompt(role)`
+
+### Also Fixed
+- **TitleBar squish** (`src/styles.css`): Phase 6 added a third tab (Skills) to the 40px titlebar, making it too cramped. Fixed: height 40→44px, tab padding 0 14px→0 13px, brand font-size 13→12px.
+
+---
+
 ## Merge Conflict Notes (for Codex)
 
 Three files had non-trivial conflicts that were hand-resolved:
