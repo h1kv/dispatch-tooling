@@ -1,0 +1,31 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+// @ts-expect-error — the CLI is plain ESM JS with no type declarations.
+import { parseFlags } from "../bin/dispatch.mjs";
+
+const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "dispatch.mjs");
+
+test("cli parseFlags separates commands, valued flags, and boolean flags", () => {
+  const { flags, rest } = parseFlags(["start", "--port", "4000", "--prod"]);
+  assert.deepEqual(rest, ["start"]);
+  assert.equal(flags.port, "4000");
+  assert.equal(flags.prod, true);
+});
+
+test("cli version prints a semver", () => {
+  const out = execFileSync("node", [CLI, "version"], { encoding: "utf8" }).trim();
+  assert.match(out, /^\d+\.\d+\.\d+/);
+});
+
+test("cli help lists the core commands", () => {
+  const out = execFileSync("node", [CLI, "help"], { encoding: "utf8" });
+  assert.match(out, /dispatch <command>/);
+  for (const cmd of ["start", "init", "doctor"]) assert.match(out, new RegExp(`\\b${cmd}\\b`));
+});
+
+test("cli rejects an unknown command with a non-zero exit", () => {
+  assert.throws(() => execFileSync("node", [CLI, "definitely-not-a-command"], { stdio: "pipe" }));
+});

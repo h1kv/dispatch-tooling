@@ -3,11 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "dispatch": "bin/dispatch.mjs"
+  },
   "scripts": {
     "dev": "tsx --env-file=.env server/index.ts",
+    "start": "node bin/dispatch.mjs start",
+    "cli": "node bin/dispatch.mjs",
     "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
-    "preview": "NODE_ENV=production tsx --env-file=.env server/index.ts"
+    "preview": "cross-env NODE_ENV=production tsx --env-file=.env server/index.ts"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -15,6 +21,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
+    "cross-env": "^7.0.3",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },

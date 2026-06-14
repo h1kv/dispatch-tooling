@@ -60,28 +60,56 @@ See the [roadmap](#roadmap) for what's in development.
 - **Node.js ≥ 20** and **npm**
 - At least one model-provider API key (OpenAI, Anthropic, or Google)
 
-### Install & run
+### One-line install
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/h1kv/dispatch-tooling/main/scripts/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/h1kv/dispatch-tooling/main/scripts/install.ps1 | iex
+```
+
+The installer clones the repo, installs dependencies, and scaffolds your config.
+
+### Manual install
 
 ```bash
 git clone https://github.com/h1kv/dispatch-tooling.git
 cd dispatch-tooling
 npm install
-
-cp .env.example .env      # then add your API key(s)
-npm run dev
+npx dispatch init        # scaffold .env + workspace dirs
+# add a provider key to .env, then:
+npx dispatch doctor      # verify your environment
+npx dispatch start       # http://localhost:3000
 ```
 
 Open **http://localhost:3000**. The server also prints your local-network URLs
 so teammates on the same network can join the same canvas.
 
-### Scripts
+### The `dispatch` CLI
+
+A dependency-free CLI ships with the project (`bin/dispatch.mjs`):
+
+| Command | What it does |
+| --- | --- |
+| `dispatch start [--port N] [--prod]` | Start the app (dev, or a production build). |
+| `dispatch init` | Scaffold `.env` + workspace dirs. |
+| `dispatch doctor` | Check your environment is ready to run. |
+| `dispatch version` / `dispatch help` | Version / usage. |
+
+### npm scripts
 
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Start the dev server (Vite middleware + WebSocket server). |
+| `npm start` | Start via the CLI (`dispatch start`). |
 | `npm run build` | Build the frontend to `dist/`. |
 | `npm run preview` | Serve the production build. |
 | `npm test` | Run the test suite (`node --test`). |
+| `npm run typecheck` | Type-check with `tsc --noEmit`. |
 
 ## Configuration
 
