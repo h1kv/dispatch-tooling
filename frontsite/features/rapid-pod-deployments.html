@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Rapid Pod Deployments</title>
+<meta name="description" content="Ship your whole DISPATCH.AI orchestration onto a GPU pod with one command. Via RunPod, DISPATCH provisions an A100 80GB, serves a 70B-class model, and wires the endpoint straight back into your canvas — out of the box." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<style>
+  /* ===== RAPID POD DEPLOYMENTS — feature-local styles (square, hairline, on-brand) ===== */
+  .pod-stage{background:#fff;}
+  .pod-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  @media (max-width:880px){ .pod-grid{grid-template-columns:1fr;} }
+  .pod-panel{background:#fff;padding:18px 18px 20px;display:flex;flex-direction:column;min-width:0;}
+
+  /* deploy terminal */
+  .pod-term{background:#fafafa;border:1px solid #eaeaea;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.85;color:#171717;}
+  .pod-term-bar{border-bottom:1px solid #eaeaea;background:#fff;}
+  .pod-term-dot{width:8px;height:8px;border:1px solid #d6d6d6;background:#fff;}
+  .pod-cmd{border:1px solid #eaeaea;background:#fff;}
+
+  /* provisioning step rows */
+  .pod-steps{display:flex;flex-direction:column;gap:7px;}
+  .pod-step{display:flex;align-items:center;gap:10px;font-family:'Geist Mono',monospace;font-size:12px;
+    border:1px solid #eaeaea;background:#fff;padding:9px 11px;opacity:.45;transition:opacity .3s var(--ease-out),border-color .3s,background .3s;}
+  .pod-step.is-active{opacity:1;border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.07);}
+  .pod-step.is-done{opacity:1;border-color:#16a34a44;}
+  .pod-step .s-label{color:#171717;letter-spacing:0;}
+  .pod-step .s-state{margin-left:auto;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#b3b3b3;}
+  .pod-step.is-active .s-state{color:#635bff;}
+  .pod-step.is-done .s-state{color:#16a34a;}
+
+  /* spec readout */
+  .pod-kv{display:grid;grid-template-columns:auto 1fr;gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  .pod-kv > div{background:#fff;padding:9px 11px;font-family:'Geist Mono',monospace;font-size:12px;min-width:0;}
+  .pod-kv .k{color:#737373;letter-spacing:0.02em;white-space:nowrap;}
+  .pod-kv .v{color:#171717;overflow-wrap:anywhere;text-align:right;}
+  .pod-kv .v.acc{color:#635bff;}
+  .pod-kv .v.ok{color:#16a34a;}
+
+  /* VRAM / GPU meter */
+  .pod-meter{height:8px;background:#f0f0f0;width:100%;overflow:hidden;border:1px solid #eaeaea;}
+  .pod-meter > span{display:block;height:100%;background:#635bff;width:0;transition:width .5s var(--ease-out);}
+
+  /* node card (orchestration mapped onto the pod) */
+  .pod-node{position:relative;background:#fff;border:1px solid #eaeaea;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:13px;
+    transition:border-color .3s var(--ease-out),box-shadow .3s var(--ease-out),opacity .35s;opacity:.5;}
+  .pod-node .nlabel{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+  .pod-node.is-live{opacity:1;border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.07);}
+  .pod-node.is-served{opacity:1;border-color:#16a34a44;}
+
+  /* run button */
+  .pod-run{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 16px;
+    font-family:'Geist Mono',monospace;font-size:12.5px;letter-spacing:0.02em;
+    background:#0a0a0a;color:#fff;border:1px solid #0a0a0a;cursor:pointer;
+    transition:background .15s var(--ease-hover),transform .15s var(--ease-hover);box-shadow:inset 0 1px 0 rgba(255,255,255,.10);}
+  .pod-run:hover{background:#262626;transform:translateY(-1px);}
+  .pod-run:disabled{opacity:.5;cursor:default;transform:none;background:#0a0a0a;}
+
+  /* deep "how it works" steps */
+  .pod-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  @media (max-width:900px){ .pod-flow{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:520px){ .pod-flow{grid-template-columns:1fr;} }
+  .pod-flow-cell{background:#fff;padding:20px;display:flex;flex-direction:column;}
+  .pod-flow-n{font-family:'Geist Mono',monospace;font-size:11px;color:#635bff;letter-spacing:0.06em;}
+
+  /* before/after compare */
+  .pod-cmp{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  @media (max-width:760px){ .pod-cmp{grid-template-columns:1fr;} }
+  .pod-cmp-col{background:#fff;padding:22px;display:flex;flex-direction:column;}
+  .pod-cmp-col.acc{background:linear-gradient(180deg, rgba(99,91,255,0.025), #fff 60%);}
+  .pod-cmp-line{display:flex;align-items:center;gap:9px;font-family:'Geist Mono',monospace;font-size:12px;color:#595959;padding:6px 0;}
+  .pod-cmp-line .x{color:#c0322a;flex:none;}
+  .pod-cmp-line .c{color:#16a34a;flex:none;}
+
+  /* active nav item (current feature) — square, on-brand */
+  .nav-mega-link.is-active{color:#0a0a0a;background:#f2f2f3;font-weight:500;}
+  .nav-acc-link.is-active{color:#0a0a0a;font-weight:500;}
+
+  @media (prefers-reduced-motion: reduce){
+    .pod-meter > span{transition:none;}
+  }
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html#top" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Feature pages don't load ../app.js, so the canonical nav behavior is inlined here:
+     scroll-opacity (nav-scrolled past ~8px) + Features mega-menu + mobile sheet/accordion. -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(hover: none)').matches;
+
+  /* scroll state — nav goes opaque (white/blur + hairline + shadow) past 8px */
+  var nav = document.getElementById('nav');
+  if(nav){
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll(); window.addEventListener('scroll', onScroll, { passive:true });
+  }
+
+  /* Desktop Features mega-menu (hover-intent on pointer devices, click everywhere) */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn  = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  if(wrap && btn && menu){
+    var openTimer=null, closeTimer=null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menu.setAttribute('hidden','');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if(!isTouch){
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer = setTimeout(open, 60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer = setTimeout(close, 140); });
+    }
+    document.addEventListener('click', function(e){ if(isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && isOpen()){ close(); btn.focus(); } });
+    menu.addEventListener('click', function(e){ if(e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle + accordion */
+  var toggle    = document.getElementById('navToggle');
+  var sheet     = document.getElementById('mobileMenu');
+  var openIcon  = document.getElementById('navOpenIcon');
+  var closeIcon = document.getElementById('navCloseIcon');
+  if(toggle && sheet){
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if(openIcon)  openIcon.classList.toggle('hidden', o);
+      if(closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click', function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key==='Escape' && !sheet.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if(window.innerWidth >= 768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    var accBtn = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if(accBtn && accPanel){
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen"></div>
+  <div class="absolute inset-0 grid-tex opacity-[0.3] pointer-events-none" aria-hidden="true"></div>
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <div class="max-w-3xl">
+      <div class="flex items-center gap-3 reveal">
+        <span class="eyebrow">infrastructure · runpod</span>
+        <a href="../index.html#features" class="mono text-[11px] text-ink-muted hover:text-ink-2 transition-colors">← all features</a>
+      </div>
+
+      <h1 class="h1 mt-6 reveal" style="transition-delay:.05s">Rapid Pod Deployments.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        One command ships your whole canvas onto a GPU pod. DISPATCH provisions an
+        A100&nbsp;80GB on RunPod, serves a 70B-class model, and wires the endpoint back
+        into every node &mdash; no containers, no inference server to stand up.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span>
+        <span class="badge"><span class="w-1.5 h-1.5 is-round bg-accent"></span> dispatch deploy --pod</span>
+      </div>
+
+      <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] mono text-ink-muted reveal" style="transition-delay:.2s">
+        <span>RunPod</span><span class="text-hair">·</span>
+        <span>A100 80GB</span><span class="text-hair">·</span>
+        <span>70B-class served</span><span class="text-hair">·</span>
+        <span class="text-ink-2">minutes, not infra</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEEP EXPLANATION — bento ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">what it is</span>
+      <h2 class="h2 mt-3">Your canvas is the deployable unit.</h2>
+      <p class="lead mt-4">A DISPATCH workflow is already a self-contained graph &mdash; nodes, bindings, tools and edges in one file. Rapid Pod Deployments lifts that file onto a GPU pod, serves a 70B-class model on it, and repoints every node at the pod's local endpoint. No Dockerfile, no Kubernetes.</p>
+    </div>
+
+    <div class="bento-wrap mt-10 reveal">
+      <div class="bento">
+
+        <div class="cell" style="grid-column:span 7;">
+          <span class="eyebrow">one command</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">From local canvas to served pod.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed max-w-xl">DISPATCH snapshots the graph, requests the GPU, boots an inference server, and rebinds the nodes. The chain you tested on a hosted model now runs against one you serve yourself &mdash; on hardware big enough to hold it.</p>
+          <div class="mt-4 pod-cmd px-4 py-3 mono text-[13px] text-ink-2 overflow-x-auto whitespace-nowrap">
+            <span class="text-ink-muted">$</span> dispatch deploy --pod <span class="text-accent">--gpu a100-80gb</span> <span class="text-ink-muted">--model</span> llama-3.1-70b
+          </div>
+        </div>
+
+        <div class="cell" style="grid-column:span 5;">
+          <span class="eyebrow">the pod</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">A100 80GB, 70B-class served.</p>
+          <div class="mt-4 pod-kv">
+            <div class="k">provider</div><div class="v acc">runpod</div>
+            <div class="k">gpu</div><div class="v">A100 80GB</div>
+            <div class="k">model</div><div class="v">70B-class</div>
+            <div class="k">endpoint</div><div class="v">pod-local /v1</div>
+            <div class="k">status</div><div class="v ok">served</div>
+          </div>
+        </div>
+
+        <div class="cell" style="grid-column:span 4;">
+          <span class="eyebrow">why it matters</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Big models, no rig.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed">A 70B-class model won't fit on a laptop. The pod gives every node &mdash; <span class="text-ink-2">Investigate</span>, <span class="text-ink-2">Plan</span>, <span class="text-ink-2">Create</span> &mdash; a frontier-scale model without buying a GPU.</p>
+        </div>
+
+        <div class="cell" style="grid-column:span 4;">
+          <span class="eyebrow">why it matters</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Co-located, low latency.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed">Orchestration and weights sit on the same pod, so a 20-wide <span class="text-ink-2">Parallel</span> fan-out talks to the model over loopback &mdash; no public round-trip per token.</p>
+        </div>
+
+        <div class="cell" style="grid-column:span 4;">
+          <span class="eyebrow">why it matters</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Ephemeral by default.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed">Spin the pod up for a run, tear it down after. You pay for GPU-minutes, not a standing cluster &mdash; and the canvas file is the only thing you keep.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">try it</span>
+      <h2 class="h2 mt-3">Press deploy. Watch the pod come up.</h2>
+      <p class="lead mt-4">A live run of <span class="text-ink-2">dispatch deploy --pod</span> &mdash; canvas packaged, GPU acquired, weights loaded into VRAM, endpoint bound back to the nodes.</p>
+    </div>
+
+    <div class="pod-stage mt-10 border border-hair bg-white reveal" id="podStage" style="transition-delay:.06s">
+      <!-- top bar -->
+      <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-11">
+        <span class="eyebrow">deploy · live</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="podStatus"><span class="dot dot-idle" id="podStatusDot"></span> <span id="podStatusText">idle</span></span>
+      </div>
+
+      <div class="p-4 sm:p-6">
+        <div class="pod-grid">
+          <!-- LEFT: deploy terminal + provisioning steps -->
+          <div class="pod-panel">
+            <div class="pod-cmd px-4 py-3 mono text-[13px] text-ink-2 overflow-x-auto whitespace-nowrap" style="border-color:#eaeaea;">
+              <span class="text-ink-muted">$</span> dispatch deploy --pod <span class="text-accent">--gpu a100-80gb</span>
+            </div>
+
+            <div class="mt-4 flex items-center gap-3">
+              <button class="pod-run" id="podRunBtn" type="button">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 1.5l8 4.5-8 4.5z"/></svg>
+                Run deploy
+              </button>
+              <span class="mono text-[11px] text-ink-muted" id="podElapsed">00:00</span>
+            </div>
+
+            <div class="pod-steps mt-5" id="podSteps" aria-live="polite">
+              <div class="pod-step" data-step="0"><span class="dot dot-idle"></span><span class="s-label">canvas packaged</span><span class="s-state">queued</span></div>
+              <div class="pod-step" data-step="1"><span class="dot dot-idle"></span><span class="s-label">runpod · A100 80GB acquired</span><span class="s-state">queued</span></div>
+              <div class="pod-step" data-step="2"><span class="dot dot-idle"></span><span class="s-label">pulling 70B-class weights</span><span class="s-state">queued</span></div>
+              <div class="pod-step" data-step="3"><span class="dot dot-idle"></span><span class="s-label">serving model · /v1 up</span><span class="s-state">queued</span></div>
+              <div class="pod-step" data-step="4"><span class="dot dot-idle"></span><span class="s-label">endpoint → orchestration</span><span class="s-state">queued</span></div>
+            </div>
+          </div>
+
+          <!-- RIGHT: pod spec + meters + orchestration mapping -->
+          <div class="pod-panel">
+            <div class="flex items-center justify-between">
+              <span class="eyebrow">pod</span>
+              <span class="mono text-[11px] flex items-center gap-2" id="podSpecState"><span class="dot dot-idle"></span> not provisioned</span>
+            </div>
+
+            <!-- VRAM meter -->
+            <div class="mt-4">
+              <div class="flex items-center justify-between mono text-[11px] text-ink-muted">
+                <span>VRAM · 70B-class weights</span>
+                <span id="podVramLabel">0 / 80 GB</span>
+              </div>
+              <div class="pod-meter mt-1.5"><span id="podVramFill"></span></div>
+            </div>
+
+            <!-- throughput -->
+            <div class="mt-3 pod-kv">
+              <div class="k">gpu</div><div class="v" id="podGpu">—</div>
+              <div class="k">model</div><div class="v" id="podModel">—</div>
+              <div class="k">throughput</div><div class="v acc" id="podTps">0 tok/s</div>
+            </div>
+
+            <!-- orchestration nodes lighting up on the pod -->
+            <div class="mt-4 flex items-center justify-between">
+              <span class="eyebrow">running on the pod</span>
+              <span class="mono text-[11px] text-ink-muted" id="podRouteNote">awaiting endpoint</span>
+            </div>
+            <div class="mt-3 grid gap-2" id="podNodes">
+              <div class="pod-node" data-node><span class="dot dot-idle"></span><span class="nlabel">Investigate</span><span class="ml-auto mono text-[10px] text-ink-muted">web_search</span></div>
+              <div class="pod-node" data-node><span class="dot dot-idle"></span><span class="nlabel">Plan</span><span class="ml-auto mono text-[10px] text-ink-muted">70B-class</span></div>
+              <div class="pod-node" data-node><span class="dot dot-idle"></span><span class="nlabel">Create</span><span class="ml-auto mono text-[10px] text-ink-muted">70B-class</span></div>
+              <div class="pod-node" data-node><span class="dot dot-idle"></span><span class="nlabel">Review</span><span class="ml-auto mono text-[10px] text-ink-muted">gate</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- footer link back -->
+      <a href="../index.html#features" class="stream-cta flex items-center justify-between border-t border-hair px-4 sm:px-5 h-12 mono text-[12px] text-ink-body hover:bg-[#fafafa] transition-colors">
+        <span>Back to all features</span>
+        <span class="link-arrow text-[12px]">all features
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — flow ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">Same graph. New place to run it.</h2>
+      <p class="lead mt-4">DISPATCH treats the pod as a managed target. Standing up a serving stack used to be a day of infra &mdash; here it's one line.</p>
+    </div>
+
+    <!-- before / after -->
+    <div class="pod-cmp mt-10 reveal">
+      <div class="pod-cmp-col">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">the old way</span>
+          <span class="mono text-[11px] text-ink-muted">infra by hand</span>
+        </div>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Stand up a serving stack.</p>
+        <div class="mt-3">
+          <div class="pod-cmp-line"><span class="x">✕</span> rent a GPU instance, SSH in</div>
+          <div class="pod-cmp-line"><span class="x">✕</span> install drivers, CUDA, an inference server</div>
+          <div class="pod-cmp-line"><span class="x">✕</span> download + shard 70B weights</div>
+          <div class="pod-cmp-line"><span class="x">✕</span> expose an endpoint, hand-wire every node</div>
+          <div class="pod-cmp-line"><span class="x">✕</span> remember to tear it all down</div>
+        </div>
+      </div>
+      <div class="pod-cmp-col acc">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">with dispatch</span>
+          <span class="mono text-[11px] text-accent">one command</span>
+        </div>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Ship the canvas.</p>
+        <div class="mt-3">
+          <div class="pod-cmp-line"><span class="c">✓</span> dispatch deploy --pod</div>
+          <div class="pod-cmp-line"><span class="c">✓</span> A100 80GB acquired on RunPod</div>
+          <div class="pod-cmp-line"><span class="c">✓</span> 70B-class served out of the box</div>
+          <div class="pod-cmp-line"><span class="c">✓</span> nodes auto-bound to the pod endpoint</div>
+          <div class="pod-cmp-line"><span class="c">✓</span> ephemeral &mdash; torn down after the run</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="feat-grouphead reveal"><span class="eyebrow">related features</span><span class="feat-rule"></span></div>
+
+    <div class="feat-grid mt-6 reveal">
+      <a href="./local-models.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">offline</span></div>
+        <h3 class="feat-title">Local Models</h3>
+        <p class="feat-desc">Ollama, llama.cpp, LM Studio — fully local, alongside the cloud.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./model-hotswap.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+        <h3 class="feat-title">Model Hotswapping</h3>
+        <p class="feat-desc">Set provider + model per node and swap live, mid-run.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./agentic-streaming.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">flagship</span></div>
+        <h3 class="feat-title">Agentic Streaming</h3>
+        <p class="feat-desc">Deploy 20 agents on one task — parallel, streamed, synthesized.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-8 reveal">
+      Back to all features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+          <li><a href="../index.html#deploy" class="hover:text-ink-2 transition-colors">Pod deployments</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Infrastructure</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span class="text-ink-2">RunPod · GPU pods</span></li>
+          <li><span>A100 80GB</span></li>
+          <li><span>70B-class served</span></li>
+          <li><span>Self-host or local</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ PAGE SCRIPTS — reveal + interactive pod-deploy demo ============ -->
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- scroll reveal (IntersectionObserver-gated) ---- */
+  var reveals = document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window && !reduce){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, {rootMargin:'0px 0px -10% 0px', threshold:0.1});
+    reveals.forEach(function(el){ io.observe(el); });
+  } else {
+    reveals.forEach(function(el){ el.classList.add('in'); });
+  }
+
+  /* ---- deploy demo ---- */
+  var stage     = document.getElementById('podStage');
+  var runBtn    = document.getElementById('podRunBtn');
+  var steps     = Array.prototype.slice.call(document.querySelectorAll('#podSteps .pod-step'));
+  var nodes     = Array.prototype.slice.call(document.querySelectorAll('#podNodes [data-node]'));
+  var statusDot = document.getElementById('podStatusDot');
+  var statusTxt = document.getElementById('podStatusText');
+  var specState = document.getElementById('podSpecState');
+  var elapsedEl = document.getElementById('podElapsed');
+  var vramFill  = document.getElementById('podVramFill');
+  var vramLabel = document.getElementById('podVramLabel');
+  var gpuEl     = document.getElementById('podGpu');
+  var modelEl   = document.getElementById('podModel');
+  var tpsEl     = document.getElementById('podTps');
+  var routeNote = document.getElementById('podRouteNote');
+
+  var timers = [];
+  var running = false;
+
+  function clearTimers(){ timers.forEach(clearTimeout); timers.forEach(clearInterval); timers = []; }
+  function later(fn, ms){ var t = setTimeout(fn, ms); timers.push(t); return t; }
+
+  function resetDemo(){
+    clearTimers();
+    running = false;
+    steps.forEach(function(s){
+      s.classList.remove('is-active','is-done');
+      s.querySelector('.dot').className = 'dot dot-idle';
+      s.querySelector('.s-state').textContent = 'queued';
+    });
+    nodes.forEach(function(n){
+      n.classList.remove('is-live','is-served');
+      n.querySelector('.dot').className = 'dot dot-idle';
+    });
+    statusDot.className = 'dot dot-idle';
+    statusTxt.textContent = 'idle';
+    specState.innerHTML = '<span class="dot dot-idle"></span> not provisioned';
+    elapsedEl.textContent = '00:00';
+    vramFill.style.width = '0';
+    vramLabel.textContent = '0 / 80 GB';
+    gpuEl.textContent = '—';
+    modelEl.textContent = '—';
+    tpsEl.textContent = '0 tok/s';
+    routeNote.textContent = 'awaiting endpoint';
+    runBtn.disabled = false;
+    runBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 1.5l8 4.5-8 4.5z"/></svg> Run deploy';
+  }
+
+  function activateStep(i){
+    var s = steps[i];
+    s.classList.add('is-active');
+    s.querySelector('.dot').className = 'dot dot-run pulse-run';
+    s.querySelector('.s-state').textContent = i === 1 ? 'acquiring' : (i === 2 ? 'pulling' : 'working');
+  }
+  function doneStep(i){
+    var s = steps[i];
+    s.classList.remove('is-active');
+    s.classList.add('is-done');
+    s.querySelector('.dot').className = 'dot dot-done';
+    s.querySelector('.s-state').textContent = 'done';
+  }
+
+  function startElapsed(){
+    var t0 = performance.now();
+    var iv = setInterval(function(){
+      if(!running){ clearInterval(iv); return; }
+      var s = Math.floor((performance.now() - t0) / 1000);
+      var mm = String(Math.floor(s/60)).padStart(2,'0');
+      var ss = String(s%60).padStart(2,'0');
+      elapsedEl.textContent = mm + ':' + ss;
+    }, 1000);
+    timers.push(iv);
+  }
+
+  function animateVram(){
+    var pct = 0;
+    var iv = setInterval(function(){
+      if(!running){ clearInterval(iv); return; }
+      pct += 7;
+      if(pct >= 71){ pct = 71; clearInterval(iv); }
+      vramFill.style.width = pct + '%';
+      vramLabel.textContent = (pct*80/100).toFixed(0) + ' / 80 GB';
+    }, 90);
+    timers.push(iv);
+  }
+
+  function rampTps(){
+    var v = 0, target = 86;
+    var iv = setInterval(function(){
+      if(!running){ clearInterval(iv); return; }
+      v += 9;
+      if(v >= target){ v = target; clearInterval(iv); }
+      tpsEl.textContent = v + ' tok/s';
+    }, 110);
+    timers.push(iv);
+  }
+
+  function runDeploy(){
+    if(running) return;
+    resetDemo();
+    running = true;
+    runBtn.disabled = true;
+    runBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 1.5l8 4.5-8 4.5z"/></svg> Deploying…';
+    statusDot.className = 'dot dot-run pulse-run';
+    statusTxt.textContent = 'provisioning';
+    startElapsed();
+
+    if(reduce){
+      // reduced-motion: resolve straight to the served end-state
+      steps.forEach(function(s,i){ doneStep(i); });
+      specState.innerHTML = '<span class="dot dot-done"></span> served';
+      gpuEl.textContent = 'A100 80GB'; modelEl.textContent = '70B-class';
+      vramFill.style.width = '71%'; vramLabel.textContent = '57 / 80 GB';
+      tpsEl.textContent = '86 tok/s'; routeNote.textContent = 'bound · pod-local /v1';
+      nodes.forEach(function(n){ n.classList.add('is-served'); n.querySelector('.dot').className = 'dot dot-done'; });
+      statusDot.className = 'dot dot-done'; statusTxt.textContent = 'served';
+      elapsedEl.textContent = '00:42';
+      running = false; runBtn.disabled = false;
+      runBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 1.5l8 4.5-8 4.5z"/></svg> Redeploy';
+      return;
+    }
+
+    // 0 — package canvas
+    activateStep(0);
+    later(function(){ doneStep(0);
+      // 1 — acquire GPU
+      activateStep(1);
+      specState.innerHTML = '<span class="dot dot-run pulse-run"></span> acquiring';
+    }, 900);
+    later(function(){ doneStep(1);
+      gpuEl.textContent = 'A100 80GB';
+      specState.innerHTML = '<span class="dot dot-run pulse-run"></span> booting';
+      // 2 — pull weights (VRAM ramps)
+      activateStep(2);
+      modelEl.textContent = '70B-class';
+      animateVram();
+    }, 2200);
+    later(function(){ doneStep(2);
+      // 3 — serve model
+      activateStep(3);
+      specState.innerHTML = '<span class="dot dot-run pulse-run"></span> serving';
+      rampTps();
+    }, 4200);
+    later(function(){ doneStep(3);
+      specState.innerHTML = '<span class="dot dot-done"></span> served';
+      // 4 — wire endpoint → orchestration
+      activateStep(4);
+      routeNote.textContent = 'binding nodes…';
+    }, 5400);
+    // light up nodes one by one as the endpoint binds
+    later(function(){ nodes[0].classList.add('is-live'); nodes[0].querySelector('.dot').className = 'dot dot-run pulse-run'; }, 5800);
+    later(function(){ nodes[1].classList.add('is-live'); nodes[1].querySelector('.dot').className = 'dot dot-run pulse-run'; }, 6100);
+    later(function(){ nodes[2].classList.add('is-live'); nodes[2].querySelector('.dot').className = 'dot dot-run pulse-run'; }, 6400);
+    later(function(){ nodes[3].classList.add('is-live'); nodes[3].querySelector('.dot').className = 'dot dot-run pulse-run'; }, 6700);
+    later(function(){
+      doneStep(4);
+      routeNote.textContent = 'bound · pod-local /v1';
+      nodes.forEach(function(n){ n.classList.remove('is-live'); n.classList.add('is-served'); n.querySelector('.dot').className = 'dot dot-done'; });
+      statusDot.className = 'dot dot-done';
+      statusTxt.textContent = 'served · running on pod';
+      running = false;
+      runBtn.disabled = false;
+      runBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 1.5l8 4.5-8 4.5z"/></svg> Redeploy';
+    }, 7300);
+  }
+
+  runBtn.addEventListener('click', runDeploy);
+
+  /* auto-run once when the stage scrolls into view; pause/reset when it leaves */
+  if('IntersectionObserver' in window){
+    var seen = false;
+    var sio = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          if(!seen){ seen = true; later(runDeploy, 350); }
+        } else {
+          if(running){ resetDemo(); }
+        }
+      });
+    }, {threshold:0.35});
+    sio.observe(stage);
+  }
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden && running){ resetDemo(); }
+  });
+})();
+</script>
+
+</body>
+</html>

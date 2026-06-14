@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Inbuilt Terminal / CLI</title>
+<meta name="description" content="A real terminal inside the DISPATCH.AI canvas. run, stop, retry <node>, deploy, stream <n>, model <node>, voice, install <skill>, status, logs, save, export — drive the whole graph without leaving it." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<!-- Page-local styles for the interactive terminal demo -->
+<style>
+  /* command palette buttons */
+  .cmd-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #eaeaea;background:#fff;
+    color:#171717;font-family:'Geist Mono',monospace;font-size:12px;padding:7px 10px;letter-spacing:0.01em;
+    min-height:40px;cursor:pointer;transition:border-color .15s var(--ease-hover),background .15s var(--ease-hover),color .15s;}
+  .cmd-chip:hover{border-color:#635bff;background:rgba(99,91,255,0.04);}
+  .cmd-chip .ck{color:#737373;}
+  .cmd-chip.is-on{border-color:#635bff;color:#0a0a0a;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+
+  /* terminal scroll body */
+  .term-scroll{height:300px;overflow-y:auto;scroll-behavior:smooth;}
+  @media (max-width:640px){ .term-scroll{height:260px;} }
+  .term-line{font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;}
+  .t-prompt{color:#635bff;} .t-cmd{color:#0a0a0a;} .t-dim{color:#737373;} .t-ok{color:#15803d;}
+  .t-warn{color:#b06d05;} .t-err{color:#c0322a;} .t-acc{color:#635bff;}
+
+  /* demo canvas stage */
+  .cli-stage{position:relative;height:100%;min-height:340px;
+    background-color:#fff;
+    background-image:radial-gradient(#e6e6e6 1.1px, transparent 1.1px);
+    background-size:18px 18px;background-position:-1px -1px;}
+  .cli-node{position:absolute;left:50%;transform:translateX(-50%);width:236px;}
+  .cli-edge{stroke:#d4d4d4;stroke-width:1.5;fill:none;}
+  .cli-edge.lit{stroke:#635bff;stroke-dasharray:6 6;animation:march 1s linear infinite;}
+
+  /* tiny deploy/pod readout */
+  .cli-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid #eaeaea;background:#fff;
+    font-family:'Geist Mono',monospace;font-size:11px;color:#595959;padding:4px 8px;}
+
+  @media (prefers-reduced-motion: reduce){
+    .term-scroll{scroll-behavior:auto;}
+    .cli-edge.lit{animation:none;}
+  }
+
+  /* current-page marker in the nav (this page = Terminal / CLI) */
+  .nav-mega-link.is-active,.nav-acc-link.is-active{color:#0a0a0a;font-weight:500;}
+  .nav-mega-link.is-active{background:#f7f7f8;}
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html#top" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Nav behavior (feature pages don't load ../app.js — inline mirror of the landing) -->
+<script>
+(function(){
+  /* scroll-opacity: opaque nav-scrolled state past ~8px (fixes transparent-on-scroll bug) */
+  var nav = document.getElementById('nav');
+  if(nav){
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /* Desktop Features mega-menu: click toggle + hover-intent + outside-click/Esc close */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn  = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if(wrap && btn && menu){
+    var openTimer = null, closeTimer = null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menu.setAttribute('hidden','');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if(!isTouch){
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer = setTimeout(open, 60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer = setTimeout(close, 140); });
+    }
+    document.addEventListener('click', function(e){ if(isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && isOpen()){ close(); btn.focus(); } });
+    menu.addEventListener('click', function(e){ if(e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle + accordion */
+  var toggle = document.getElementById('navToggle');
+  var sheet  = document.getElementById('mobileMenu');
+  var openIcon = document.getElementById('navOpenIcon');
+  var closeIcon = document.getElementById('navCloseIcon');
+  if(toggle && sheet){
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if(openIcon) openIcon.classList.toggle('hidden', o);
+      if(closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click', function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && !sheet.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if(window.innerWidth >= 768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    var accBtn = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if(accBtn && accPanel){
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen"></div>
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <a href="../index.html#features" class="link-arrow reveal text-[13px]" style="--ease-hover:cubic-bezier(0.4,0,0.2,1)">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      All features
+    </a>
+
+    <div class="max-w-3xl">
+      <span class="eyebrow reveal mt-6 inline-block" style="transition-delay:.03s">interface + control</span>
+      <h1 class="h1 mt-4 reveal" style="transition-delay:.05s">Inbuilt Terminal&nbsp;/&nbsp;CLI</h1>
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        A real terminal, docked in the canvas. Type <span class="mono text-ink-2">run</span>,
+        <span class="mono text-ink-2">retry&nbsp;Review</span>, <span class="mono text-ink-2">stream&nbsp;20</span> or
+        <span class="mono text-ink-2">deploy</span> — the graph reacts. Drive every node without leaving the keyboard.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <span class="feat-status feat-status-active"><span class="sdot"></span>Active</span>
+        <span class="badge"><span class="w-1.5 h-1.5 is-round bg-accent"></span> Open source · MIT</span>
+        <span class="badge"><span class="mono">keyboard-first</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT IS ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-14">
+      <div class="reveal">
+        <span class="eyebrow">what it is</span>
+        <h2 class="h2 mt-3">The canvas, but you type to it.</h2>
+        <p class="lead mt-4">The graph and the terminal are two views of one runtime. Anything you can do by dragging and wiring, you can do with a verb and a node name — and the prompt talks back: states, logs, costs, deploy URLs.</p>
+        <p class="mt-4 text-[15px] text-ink-body leading-relaxed">No shell to context-switch to, no IDs to copy. The CLI <span class="text-ink-2">is</span> the orchestration layer — the same engine behind the Run button, exposed as a language.</p>
+      </div>
+
+      <!-- command vocabulary table -->
+      <div class="reveal" style="transition-delay:.06s">
+        <div class="border border-hair bg-white">
+          <div class="flex items-center justify-between border-b border-hair px-4 h-11 bg-[#fafafa]">
+            <span class="eyebrow">the verbs</span>
+            <span class="mono text-[11px] text-ink-muted">dispatch &gt;</span>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-px bg-hair">
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">run</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Execute the graph top-to-bottom from the Initialiser.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">stop</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Halt the run; in-flight nodes pause, edges freeze.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">retry &lt;node&gt;</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Re-run one node — e.g. <span class="mono text-ink-2">retry Review</span> — keeping upstream context.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">model &lt;node&gt;</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Hotswap a node's provider + model in place.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">stream &lt;n&gt;</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Fan a task out across <span class="mono text-ink-2">n</span> parallel agents.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">deploy</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Package the canvas and ship it to a pod; prints the URL.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">install &lt;skill&gt;</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Pull a community skill; it becomes a droppable node.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">voice</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Hand control to the VoiceOrb and speak the graph.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">status · logs</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Per-node state, tokens, spend; tail a node's live log.</p></div>
+            <div class="bg-white p-4"><div class="mono text-[12.5px] text-accent">save · export</div><p class="mt-1.5 text-[12.5px] text-ink-body leading-snug">Commit the canvas to a file; export as a portable prompt.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO ============ -->
+<section class="border-b border-hair bg-[#fafafa] relative overflow-hidden">
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(99,91,255,0.05), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">try it</span>
+      <h2 class="h2 mt-3">Type a command. Watch the graph move.</h2>
+      <p class="lead mt-4">Pick a command below. The terminal echoes it, the runtime responds, and the canvas on the right updates node states, edges and the deploy readout in real time.</p>
+    </div>
+
+    <!-- command palette -->
+    <div class="mt-8 flex flex-wrap gap-2 reveal" style="transition-delay:.04s" id="cmdPalette" role="group" aria-label="Run a CLI command">
+      <button class="cmd-chip" data-cmd="run"><span class="ck">$</span> run</button>
+      <button class="cmd-chip" data-cmd="status"><span class="ck">$</span> status</button>
+      <button class="cmd-chip" data-cmd="logs investigate"><span class="ck">$</span> logs Investigate</button>
+      <button class="cmd-chip" data-cmd="model create"><span class="ck">$</span> model Create</button>
+      <button class="cmd-chip" data-cmd="retry review"><span class="ck">$</span> retry Review</button>
+      <button class="cmd-chip" data-cmd="stream 20"><span class="ck">$</span> stream 20</button>
+      <button class="cmd-chip" data-cmd="install seo-audit"><span class="ck">$</span> install seo-audit</button>
+      <button class="cmd-chip" data-cmd="deploy"><span class="ck">$</span> deploy</button>
+      <button class="cmd-chip" data-cmd="save"><span class="ck">$</span> save</button>
+      <button class="cmd-chip" data-cmd="clear"><span class="ck">$</span> clear</button>
+    </div>
+
+    <!-- terminal + canvas -->
+    <div class="mt-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-px bg-hair border border-hair reveal" style="transition-delay:.08s">
+
+      <!-- TERMINAL -->
+      <div class="term bg-white flex flex-col">
+        <div class="term-bar flex items-center gap-2 px-4 h-11">
+          <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+          <span class="ml-2 mono text-[12px] text-ink-muted">dispatch — terminal</span>
+          <span class="ml-auto mono text-[11px] text-ink-muted flex items-center gap-2" id="runState"><span class="dot dot-idle" id="runStateDot"></span> idle</span>
+        </div>
+        <div class="term-scroll px-4 py-3" id="termOut" aria-live="polite" aria-label="Terminal output">
+          <div class="term-line"><span class="t-dim">DISPATCH.AI terminal · type a command above, or press</span> <span class="t-acc">run</span></div>
+          <div class="term-line"><span class="t-dim">graph: 4 nodes · Initialiser → Investigate → Create → Review</span></div>
+        </div>
+        <div class="border-t border-hair px-4 h-11 flex items-center gap-2 mono text-[12.5px]">
+          <span class="t-prompt">dispatch&nbsp;&gt;</span>
+          <span class="t-cmd" id="promptEcho"></span>
+          <span class="caret" id="promptCaret"></span>
+        </div>
+      </div>
+
+      <!-- CANVAS -->
+      <div class="bg-white flex flex-col">
+        <div class="flex items-center justify-between border-b border-hair px-4 h-11">
+          <span class="eyebrow">canvas</span>
+          <span class="mono text-[11px] text-ink-muted flex items-center gap-2" id="canvasMeta"><span class="dot dot-idle"></span> 4 nodes</span>
+        </div>
+        <div class="cli-stage flex-1" id="cliStage">
+          <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 300 360" preserveAspectRatio="none" aria-hidden="true">
+            <path class="cli-edge" id="ce1" d="M150,58 L150,108"/>
+            <path class="cli-edge" id="ce2" d="M150,150 L150,200"/>
+            <path class="cli-edge" id="ce3" d="M150,242 L150,292"/>
+          </svg>
+
+          <div class="cli-node" style="top:22px;">
+            <div class="node" id="cn-init"><span class="dot dot-idle" data-d></span><span class="nlabel">Initialiser</span><span class="ml-auto mono text-[11px] text-ink-muted">trigger</span></div>
+          </div>
+          <div class="cli-node" style="top:114px;">
+            <div class="node" id="cn-investigate"><span class="dot dot-idle" data-d></span><span class="nlabel">Investigate</span><span class="ml-auto mono text-[11px] text-ink-muted" data-meta>web_search</span></div>
+          </div>
+          <div class="cli-node" style="top:206px;">
+            <div class="node" id="cn-create"><span class="dot dot-idle" data-d></span><span class="nlabel">Create</span><span class="ml-auto mono text-[11px] text-ink-muted" data-meta>gpt-4o</span></div>
+          </div>
+          <div class="cli-node" style="top:298px;">
+            <div class="node" id="cn-review"><span class="dot dot-idle" data-d></span><span class="nlabel">Review</span><span class="ml-auto mono text-[11px] text-ink-muted" data-meta>gate</span></div>
+          </div>
+        </div>
+        <!-- deploy / pod readout strip -->
+        <div class="border-t border-hair px-4 py-2.5 flex flex-wrap items-center gap-2" id="podStrip">
+          <span class="cli-pill"><span class="dot dot-idle is-round" style="width:6px;height:6px;" id="podDot"></span> <span id="podLabel">pod: not deployed</span></span>
+          <span class="cli-pill" id="podUrl" hidden>dispatch.run/auth-harden</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="mt-4 mono text-[11.5px] text-ink-muted reveal">Every command maps 1:1 to the real terminal — same grammar, same node engine.</p>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — small bento ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">One runtime, two surfaces.</h2>
+      <p class="lead mt-4">The terminal isn't a wrapper that scripts the UI — it speaks straight to the orchestrator. So does the canvas. They stay in lock-step.</p>
+    </div>
+
+    <div class="bento-wrap mt-10 reveal" style="transition-delay:.05s">
+      <div class="bento">
+        <div class="cell" style="grid-column:span 4;">
+          <span class="eyebrow">parse</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Verb + node, nothing more.</p>
+          <p class="mt-2 text-[13px] text-ink-body leading-relaxed">Commands resolve to node IDs on the active graph. <span class="mono text-ink-2">retry Review</span> targets the Review node; tab-completion knows every node and skill by name.</p>
+        </div>
+        <div class="cell" style="grid-column:span 4;">
+          <span class="eyebrow">dispatch</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Same engine as Run.</p>
+          <p class="mt-2 text-[13px] text-ink-body leading-relaxed">The parsed command is handed to the orchestrator that drives Parallel, Merge, Apply and Deploy. No second code path — the terminal can't drift from the canvas.</p>
+        </div>
+        <div class="cell" style="grid-column:span 4;">
+          <span class="eyebrow">stream back</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">The prompt talks back.</p>
+          <p class="mt-2 text-[13px] text-ink-body leading-relaxed">State transitions, per-node tokens, <span class="mono text-ink-2">logs</span> tails and deploy URLs print inline — the same events that pulse the dots and march the edges.</p>
+        </div>
+
+        <div class="cell" style="grid-column:span 6;">
+          <span class="eyebrow">scriptable + reproducible</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">A run you can paste.</p>
+          <p class="mt-2 text-[13px] text-ink-body leading-relaxed mb-4">Because every action is a line, a whole workflow becomes a short, reviewable script. Drop it in a README, share it in an issue, replay it on any canvas.</p>
+          <div class="term bg-white mt-auto">
+            <div class="px-3.5 py-3 mono text-[12px] leading-[1.8]">
+              <div><span class="t-prompt">$</span> <span class="t-cmd">model Create anthropic claude-opus</span></div>
+              <div><span class="t-prompt">$</span> <span class="t-cmd">run</span></div>
+              <div><span class="t-prompt">$</span> <span class="t-cmd">retry Review</span></div>
+              <div><span class="t-prompt">$</span> <span class="t-cmd">deploy</span> <span class="t-ok">→ dispatch.run/auth-harden</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell" style="grid-column:span 6;">
+          <span class="eyebrow">drives every node type</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Nothing is off-limits.</p>
+          <p class="mt-2 text-[13px] text-ink-body leading-relaxed mb-4">If it's a node, the CLI can address it — including control-flow and infra nodes.</p>
+          <div class="flex flex-wrap gap-1.5 mt-auto">
+            <span class="ctrl-chip">Initialiser</span><span class="ctrl-chip">Investigate</span><span class="ctrl-chip">Plan</span>
+            <span class="ctrl-chip">Design</span><span class="ctrl-chip">Create</span><span class="ctrl-chip">Evaluate</span>
+            <span class="ctrl-chip">Doc</span><span class="ctrl-chip">Apply</span><span class="ctrl-chip">Context</span>
+            <span class="ctrl-chip">Review</span><span class="ctrl-chip ctrl-chip-accent">Parallel</span>
+            <span class="ctrl-chip ctrl-chip-accent">Merge</span><span class="ctrl-chip ctrl-chip-accent">Deploy</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-10 reveal">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      Back to all features
+    </a>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="feat-grouphead reveal"><span class="eyebrow">related features</span><span class="feat-rule"></span></div>
+    <div class="feat-grid mt-6 reveal" style="transition-delay:.05s">
+      <a href="./voice-control.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">VoiceOrb</span></div>
+        <h3 class="feat-title">Agentic Voice Control</h3>
+        <p class="feat-desc">The terminal's <span class="mono">voice</span> verb, expanded — speak the graph into being.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./advanced-orchestration.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">control</span></div>
+        <h3 class="feat-title">Advanced Orchestration</h3>
+        <p class="feat-desc">What <span class="mono">retry</span>, <span class="mono">stop</span> and concurrency caps drive under the hood.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./model-hotswap.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+        <h3 class="feat-title">Model Hotswapping</h3>
+        <p class="feat-desc">The engine behind <span class="mono">model &lt;node&gt;</span> — swap provider live, mid-run.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+          <li><a href="./voice-control.html" class="hover:text-ink-2 transition-colors">Voice control</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ DEMO + REVEAL SCRIPT (self-contained, no app.js) ============ -->
+<script>
+(function(){
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- scroll reveal (IntersectionObserver-gated) ---- */
+  var reveals = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+  if (reduce || !('IntersectionObserver' in window)) {
+    reveals.forEach(function(el){ el.classList.add('in'); });
+  } else {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    reveals.forEach(function(el){ io.observe(el); });
+  }
+
+  /* ---- terminal demo ---- */
+  var out      = document.getElementById('termOut');
+  var echo     = document.getElementById('promptEcho');
+  var palette  = document.getElementById('cmdPalette');
+  var runState = document.getElementById('runState');
+  var runDot   = document.getElementById('runStateDot');
+  var canvasMeta = document.getElementById('canvasMeta');
+  var podDot   = document.getElementById('podDot');
+  var podLabel = document.getElementById('podLabel');
+  var podUrl   = document.getElementById('podUrl');
+  if(!out) return;
+
+  var NODES = {
+    init:        { el: document.getElementById('cn-init'),        name: 'Initialiser' },
+    investigate: { el: document.getElementById('cn-investigate'), name: 'Investigate' },
+    create:      { el: document.getElementById('cn-create'),      name: 'Create' },
+    review:      { el: document.getElementById('cn-review'),      name: 'Review' }
+  };
+  var EDGES = [document.getElementById('ce1'), document.getElementById('ce2'), document.getElementById('ce3')];
+  var ORDER = ['init','investigate','create','review'];
+
+  var queue = [];      // pending step timers
+  var busy  = false;
+
+  function clearTimers(){ queue.forEach(clearTimeout); queue = []; }
+  function after(ms, fn){ queue.push(setTimeout(fn, reduce ? 0 : ms)); }
+
+  function setDot(node, cls){
+    var d = node.el.querySelector('[data-d]');
+    d.className = 'dot ' + cls;
+  }
+  function setNodeClass(node, c){
+    node.el.className = 'node' + (c ? (' ' + c) : '');
+  }
+  function setRunState(label, dotCls){
+    runDot.className = 'dot ' + dotCls;
+    runState.lastChild.textContent = ' ' + label;
+  }
+  function setCanvasMeta(label, dotCls){
+    canvasMeta.querySelector('.dot').className = 'dot ' + dotCls;
+    canvasMeta.lastChild.textContent = ' ' + label;
+  }
+
+  function print(parts){
+    var line = document.createElement('div');
+    line.className = 'term-line';
+    if(typeof parts === 'string'){ line.textContent = parts; }
+    else { parts.forEach(function(p){
+      var s = document.createElement('span');
+      s.className = p[0]; s.textContent = p[1]; line.appendChild(s);
+    }); }
+    out.appendChild(line);
+    out.scrollTop = out.scrollHeight;
+    return line;
+  }
+  function printCmd(cmd){ print([['t-prompt','dispatch > '], ['t-cmd', cmd]]); }
+
+  function resetNodes(){
+    ORDER.forEach(function(k){ setDot(NODES[k], 'dot-idle'); setNodeClass(NODES[k]); });
+    EDGES.forEach(function(e){ if(e) e.classList.remove('lit'); });
+  }
+
+  /* sequential run: light each node in turn */
+  function doRun(){
+    busy = true;
+    resetNodes();
+    setRunState('running', 'dot-run pulse-run');
+    setCanvasMeta('running', 'dot-run pulse-run');
+    print([['t-dim','executing graph · 4 nodes top-to-bottom']]);
+
+    var step = 0;
+    function tick(){
+      if(step > 0){
+        var prev = NODES[ORDER[step-1]];
+        setDot(prev, 'dot-done'); setNodeClass(prev, 'is-done');
+        if(EDGES[step-1]) EDGES[step-1].classList.remove('lit');
+      }
+      if(step >= ORDER.length){
+        setRunState('done', 'dot-done');
+        setCanvasMeta('run complete', 'dot-done');
+        print([['t-ok','✓ run complete '], ['t-dim','· 4/4 nodes · 69.3k tok · $0.23']]);
+        busy = false;
+        return;
+      }
+      var node = NODES[ORDER[step]];
+      setDot(node, 'dot-run pulse-run'); setNodeClass(node, 'is-running');
+      if(step > 0 && EDGES[step-1]) EDGES[step-1].classList.add('lit');
+      print([['t-acc','→ '], ['t-cmd', node.name], ['t-dim', '  running…']]);
+      step++;
+      after(820, tick);
+    }
+    tick();
+  }
+
+  function doStatus(){
+    print([['t-dim','NODE          STATE      TOKENS    COST']]);
+    print([['t-ok','Initialiser   done       —         —']]);
+    print([['t-ok','Investigate   done       12.4k     $0.04']]);
+    print([['t-ok','Create        done       38.7k     $0.11']]);
+    print([['t-warn','Review        gate       2.3k      $0.01']]);
+    print([['t-dim','────────────────────────────────────'],]);
+    print([['t-acc','total         '], ['t-cmd','69.3k tok · $0.23']]);
+  }
+
+  function doLogs(node){
+    print([['t-dim','tail · '], ['t-cmd', node + '.log']]);
+    print([['t-dim','['], ['t-acc','tool'], ['t-dim','] web_search("competitor pricing 2026")']]);
+    print([['t-dim','['], ['t-ok','ok'], ['t-dim','] 3 sources fetched · 4.1s']]);
+    print([['t-dim','['], ['t-acc','write'], ['t-dim','] run.findings ← 1.2k tokens']]);
+  }
+
+  function doModel(){
+    busy = true;
+    print([['t-dim','swapping Create · openai/gpt-4o → ']]);
+    var meta = NODES.create.el.querySelector('[data-meta]');
+    setDot(NODES.create, 'dot-run pulse-run');
+    after(620, function(){
+      meta.textContent = 'claude-opus';
+      meta.className = 'ml-auto mono text-[11px] text-accent';
+      setDot(NODES.create, 'dot-idle');
+      print([['t-ok','✓ Create now → anthropic/claude-opus']]);
+      busy = false;
+    });
+  }
+
+  function doRetry(){
+    busy = true;
+    var n = NODES.review;
+    setDot(n, 'dot-run pulse-run'); setNodeClass(n, 'is-running');
+    if(EDGES[2]) EDGES[2].classList.add('lit');
+    setRunState('retrying', 'dot-run pulse-run');
+    print([['t-dim','re-running '], ['t-cmd','Review'], ['t-dim',' · upstream context preserved']]);
+    after(900, function(){
+      setDot(n, 'dot-done'); setNodeClass(n, 'is-done');
+      if(EDGES[2]) EDGES[2].classList.remove('lit');
+      setRunState('done', 'dot-done');
+      print([['t-ok','✓ Review passed · gate cleared']]);
+      busy = false;
+    });
+  }
+
+  function doStream(){
+    busy = true;
+    setRunState('streaming', 'dot-run pulse-run');
+    setCanvasMeta('20 agents · fan-out', 'dot-run pulse-run');
+    print([['t-dim','fan-out · '], ['t-acc','20'], ['t-dim',' agents on "refactor & harden the auth layer"']]);
+    var done = 0, total = 20;
+    function bump(){
+      done += Math.max(1, Math.round(Math.random()*4));
+      if(done >= total){ done = total; }
+      print([['t-acc','▮ '], ['t-cmd', done + '/' + total + ' agents'], ['t-dim', done === total ? '  · converging…' : '  streaming…']]);
+      if(done < total){ after(360, bump); }
+      else after(520, function(){
+        setRunState('done', 'dot-done');
+        setCanvasMeta('merged · 20 → 1', 'dot-done');
+        print([['t-ok','✓ merged 20 → 1 synthesized result']]);
+        busy = false;
+      });
+    }
+    bump();
+  }
+
+  function doInstall(skill){
+    busy = true;
+    print([['t-dim','resolving skill · '], ['t-cmd', skill]]);
+    after(500, function(){ print([['t-dim','fetching… '], ['t-ok','signed']]); });
+    after(1000, function(){
+      print([['t-ok','✓ installed '], ['t-cmd', skill], ['t-dim',' · now a droppable node']]);
+      busy = false;
+    });
+  }
+
+  function doDeploy(){
+    busy = true;
+    setRunState('deploying', 'dot-run pulse-run');
+    podDot.className = 'dot dot-run pulse-run is-round';
+    podLabel.textContent = 'pod: provisioning…';
+    print([['t-dim','packaging canvas → pod']]);
+    after(620, function(){ print([['t-dim','· acquiring runpod · A100 80GB']]); });
+    after(1200, function(){ print([['t-dim','· serving 70B-class endpoint']]); });
+    after(1750, function(){
+      podDot.className = 'dot dot-done is-round';
+      podLabel.textContent = 'pod: live · runpod A100';
+      podUrl.hidden = false;
+      setRunState('deployed', 'dot-done');
+      print([['t-ok','✓ deployed → '], ['t-acc','dispatch.run/auth-harden']]);
+      busy = false;
+    });
+  }
+
+  function doSave(){
+    print([['t-dim','writing canvas.dispatch · ']]);
+    after(420, function(){ print([['t-ok','✓ saved '], ['t-dim','· 4 nodes · 3 edges · git-tracked']]); });
+  }
+
+  function doClear(){
+    out.innerHTML = '';
+    print([['t-dim','DISPATCH.AI terminal · ready']]);
+    resetNodes();
+    setRunState('idle', 'dot-idle');
+    setCanvasMeta('4 nodes', 'dot-idle');
+    podDot.className = 'dot dot-idle is-round';
+    podLabel.textContent = 'pod: not deployed';
+    podUrl.hidden = true;
+    var meta = NODES.create.el.querySelector('[data-meta]');
+    meta.textContent = 'gpt-4o';
+    meta.className = 'ml-auto mono text-[11px] text-ink-muted';
+  }
+
+  /* dispatch table */
+  function execute(raw){
+    var parts = raw.trim().split(/\s+/);
+    var verb = parts[0];
+    if(verb === 'clear'){ doClear(); return; }
+    printCmd(raw);
+    switch(verb){
+      case 'run':     doRun(); break;
+      case 'status':  doStatus(); break;
+      case 'logs':    doLogs(parts[1] ? parts[1][0].toUpperCase()+parts[1].slice(1) : 'Investigate'); break;
+      case 'model':   doModel(); break;
+      case 'retry':   doRetry(); break;
+      case 'stream':  doStream(); break;
+      case 'install': doInstall(parts[1] || 'skill'); break;
+      case 'deploy':  doDeploy(); break;
+      case 'save':    doSave(); break;
+      default:        print([['t-err','? unknown command: '], ['t-cmd', verb]]);
+    }
+  }
+
+  /* type-out the echo, then run */
+  function typeAndRun(cmd){
+    if(busy) return;
+    clearTimers();
+    echo.textContent = '';
+    var i = 0;
+    (function typeStep(){
+      if(i <= cmd.length){
+        echo.textContent = cmd.slice(0, i);
+        i++;
+        if(reduce){ echo.textContent = cmd; execute(cmd); after(30, function(){ echo.textContent=''; }); return; }
+        after(26, typeStep);
+      } else {
+        after(160, function(){ execute(cmd); echo.textContent=''; });
+      }
+    })();
+  }
+
+  palette.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-cmd]');
+    if(!btn) return;
+    if(busy) return;
+    palette.querySelectorAll('.cmd-chip').forEach(function(b){ b.classList.remove('is-on'); });
+    btn.classList.add('is-on');
+    typeAndRun(btn.getAttribute('data-cmd'));
+  });
+})();
+</script>
+
+</body>
+</html>

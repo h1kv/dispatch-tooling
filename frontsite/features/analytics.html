@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Analytics</title>
+<meta name="description" content="Node-delegated cost tracking: every node meters its own tokens and spend, rolling up into one dashboard across every provider and local model — OpenAI, Anthropic, Google, or fully local." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<!-- Page-local styles for the Analytics demo (square, hairline, on-brand) -->
+<style>
+  /* demo stage */
+  .anx-stage{background:#fff;}
+  .anx-canvas{
+    position:relative;background-color:#fff;
+    background-image:radial-gradient(#e2e2e2 1.1px, transparent 1.1px);
+    background-size:18px 18px;background-position:-1px -1px;
+  }
+
+  /* run button */
+  .anx-run{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;font-size:13px;font-weight:500;
+    background:#0a0a0a;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,0.10);
+    transition:background .15s var(--ease-hover),transform .15s var(--ease-hover);cursor:pointer;letter-spacing:-0.01em;}
+  .anx-run:hover{background:#262626;transform:translateY(-1px);}
+  .anx-run:disabled{opacity:.55;cursor:default;transform:none;}
+
+  /* split layout: live chain on the left, rolling dashboard on the right */
+  .anx-split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#eaeaea;border-left:1px solid #eaeaea;border-right:1px solid #eaeaea;border-bottom:1px solid #eaeaea;}
+  @media (max-width:860px){ .anx-split{grid-template-columns:1fr;} }
+  .anx-pane{background:#fff;padding:16px 16px 18px;min-width:0;}
+
+  /* per-node meter rows in the running chain */
+  .anx-meter{display:flex;flex-direction:column;gap:8px;}
+  .anx-mrow{display:flex;align-items:center;gap:10px;border:1px solid #eaeaea;background:#fff;padding:9px 11px;
+    transition:border-color .3s var(--ease-out),box-shadow .3s var(--ease-out),background .3s;}
+  .anx-mrow.is-active{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.07);}
+  .anx-mrow.is-done{background:#fcfcfc;}
+  .anx-mname{font-family:'Geist Mono',monospace;font-size:12.5px;color:#171717;letter-spacing:0;white-space:nowrap;}
+  .anx-mprov{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.04em;color:#a3a3a3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .anx-mmeter{margin-left:auto;display:flex;align-items:center;gap:12px;}
+  .anx-mtok{font-family:'Geist Mono',monospace;font-size:11px;color:#737373;font-variant-numeric:tabular-nums;min-width:62px;text-align:right;}
+  .anx-mcost{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;font-variant-numeric:tabular-nums;min-width:48px;text-align:right;}
+  .anx-mrow.is-active .anx-mcost{color:#635bff;}
+
+  /* the rollup total card */
+  .anx-roll{margin-top:1px;border:1px solid #eaeaea;background:#0a0a0a;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:12px;}
+  .anx-roll-cap{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#a3a3a3;}
+  .anx-roll-tok{margin-left:auto;font-family:'Geist Mono',monospace;font-size:12px;color:#d4d4d4;font-variant-numeric:tabular-nums;}
+  .anx-roll-cost{font-family:'Geist Mono',monospace;font-size:18px;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;}
+  .anx-roll-cost .acc{color:#9f99ff;}
+
+  /* dashboard: per-model bars */
+  .anx-dash-cap{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#737373;}
+  .anx-bars{display:flex;flex-direction:column;gap:13px;margin-top:14px;}
+  .anx-brow{display:flex;flex-direction:column;gap:6px;}
+  .anx-btop{display:flex;align-items:center;justify-content:space-between;font-family:'Geist Mono',monospace;font-size:12px;}
+  .anx-bname{color:#171717;display:flex;align-items:center;gap:8px;}
+  .anx-bprov{font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#b3b3b3;border:1px solid #eaeaea;padding:1px 5px;}
+  .anx-bcost{color:#171717;font-variant-numeric:tabular-nums;}
+  .anx-bar{height:8px;background:#f0f0f0;width:100%;overflow:hidden;}
+  .anx-bar > span{display:block;height:100%;width:0;background:#635bff;transition:width .7s var(--ease-out);}
+  .anx-bar.b2 > span{background:#8d85f2;}
+  .anx-bar.b3 > span{background:#b9b3f7;}
+  .anx-bar.b4 > span{background:#d9d6fb;}
+
+  /* dashboard donut-ish summary stat row */
+  .anx-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;margin-top:16px;overflow:hidden;}
+  .anx-stat{background:#fff;padding:12px 13px;}
+  .anx-stat-k{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#a3a3a3;}
+  .anx-stat-v{margin-top:5px;font-family:'Geist Mono',monospace;font-size:16px;color:#0a0a0a;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;}
+
+  /* edges in the chain illustration */
+  .anx-edge{stroke:#d4d4d4;stroke-width:1.5;fill:none;stroke-linecap:round;}
+  .anx-edge.is-flow{stroke:#635bff;stroke-dasharray:6 6;animation:anxMarch 1s linear infinite;}
+  @keyframes anxMarch{to{stroke-dashoffset:-12;}}
+
+  /* how-it-works four-cell flow */
+  .anx-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  @media (max-width:760px){ .anx-flow{grid-template-columns:1fr 1fr;} }
+  @media (max-width:440px){ .anx-flow{grid-template-columns:1fr;} }
+  .anx-fcell{background:#fff;padding:20px 18px;display:flex;flex-direction:column;}
+  .anx-fnum{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#635bff;}
+  .anx-fh{margin-top:10px;font-size:15px;font-weight:600;letter-spacing:-0.02em;color:#0a0a0a;}
+  .anx-fp{margin-top:7px;font-size:13px;line-height:1.55;color:#595959;}
+
+  /* bento-style why grid */
+  .anx-bento{display:grid;grid-template-columns:repeat(12,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  .anx-bcell{background:#fff;padding:22px;position:relative;}
+  @media (max-width:820px){ .anx-bento{grid-template-columns:1fr;} .anx-bcell{grid-column:1 / -1 !important;} }
+
+  /* related row */
+  .rel-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  @media (max-width:760px){ .rel-grid{grid-template-columns:1fr;} }
+
+  @media (prefers-reduced-motion: reduce){
+    .anx-edge.is-flow{animation:none;}
+    .anx-bar > span{transition:none;}
+  }
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV (canonical — matches landing) ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html#top" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Inline nav behavior (feature pages don't load ../app.js): scroll glass + mega-menu + mobile sheet + accordion -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(hover: none)').matches;
+
+  /* nav glass on scroll (opaque past ~8px) */
+  var nav = document.getElementById('nav');
+  if(nav){
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll(); window.addEventListener('scroll', onScroll, { passive:true });
+  }
+
+  /* Desktop Features mega-menu (hover-intent on pointer devices, click everywhere) */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  if(wrap && btn && menu){
+    var openTimer = null, closeTimer = null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menu.setAttribute('hidden','');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if(!isTouch){
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer = setTimeout(open, 60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer = setTimeout(close, 140); });
+    }
+    document.addEventListener('click', function(e){ if(isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && isOpen()){ close(); btn.focus(); } });
+    menu.addEventListener('click', function(e){ if(e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle */
+  var toggle = document.getElementById('navToggle');
+  var sheet = document.getElementById('mobileMenu');
+  var openIcon = document.getElementById('navOpenIcon');
+  var closeIcon = document.getElementById('navCloseIcon');
+  if(toggle && sheet){
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if(openIcon) openIcon.classList.toggle('hidden', o);
+      if(closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){ el.addEventListener('click', function(){ setOpen(false); }); });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && !sheet.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if(window.innerWidth >= 768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    /* Mobile Features accordion */
+    var accBtn = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if(accBtn && accPanel){
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen" aria-hidden="true"></div>
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <div class="max-w-3xl">
+      <a href="../index.html#features" class="link-arrow mb-6 reveal text-[13px]">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+        Back to all features
+      </a>
+
+      <span class="eyebrow reveal block">interface + control</span>
+
+      <h1 class="h1 mt-3 reveal" style="transition-delay:.05s">Analytics.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        Node-delegated cost tracking. Every node meters its <span class="text-ink-2">own</span> tokens
+        and spend as it runs — and the canvas rolls all of them into one dashboard across every
+        provider and local model.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <!-- STATUS CHIP — Planning (grey dot) -->
+        <span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2">scope: <span class="text-ink-2">tokens · cost · per node, per model</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT IS ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.95fr_1.05fr] gap-10 lg:gap-16 items-start">
+      <div class="reveal">
+        <span class="eyebrow">what it is</span>
+        <h2 class="h2 mt-3">Each node accounts for itself.</h2>
+        <p class="lead mt-4">Most tools wrap one meter around the whole app. DISPATCH delegates cost tracking to the <span class="text-ink-2">node</span>: each one tallies its own tokens in and out, and prices them at its own model's rate.</p>
+        <p class="mt-4 text-[15px] leading-relaxed text-ink-body">An <span class="mono text-[14px] text-ink-2">Investigate</span> on <span class="mono text-[14px] text-ink-2">gpt-4o</span>, a <span class="mono text-[14px] text-ink-2">Plan</span> on <span class="mono text-[14px] text-ink-2">claude-opus</span>, a <span class="mono text-[14px] text-ink-2">Create</span> on local <span class="mono text-[14px] text-ink-2">llama-70b</span> — each prices itself exactly. The canvas only rolls the numbers up: per node, per model, per provider, per run. No billing exporter, no guesswork.</p>
+      </div>
+
+      <!-- mini chain illustration: three nodes, each metering itself -->
+      <div class="reveal" style="transition-delay:.06s">
+        <div class="border border-hair bg-white">
+          <div class="flex items-center justify-between border-b border-hair px-5 h-11">
+            <span class="eyebrow">delegated metering</span>
+            <span class="mono text-[12px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> per node</span>
+          </div>
+          <div class="relative p-6">
+            <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 360 300" preserveAspectRatio="none" aria-hidden="true">
+              <path class="anx-edge" d="M180,62 L180,112"/>
+              <path class="anx-edge" d="M180,170 L180,220"/>
+            </svg>
+            <div class="relative space-y-[44px]">
+              <div class="node"><span class="dot dot-done"></span><span class="nlabel">Investigate</span><span class="ml-auto mono text-[11px] text-ink-muted">gpt-4o · $0.04</span></div>
+              <div class="node"><span class="dot dot-done"></span><span class="nlabel">Plan</span><span class="ml-auto mono text-[11px] text-ink-muted">opus · $0.07</span></div>
+              <div class="node"><span class="dot dot-done"></span><span class="nlabel">Create</span><span class="ml-auto mono text-[11px] text-ink-muted">llama-70b · $0.03</span></div>
+            </div>
+            <p class="relative mt-6 mono text-[11px] text-ink-muted">three nodes · three models · one rolled-up total = $0.14</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — four stages ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">Meter at the node, roll up at the canvas.</h2>
+      <p class="lead mt-4">The same loop fires every time a node runs: <span class="mono text-[16px] text-ink-2">count → price → emit → roll up</span>.</p>
+    </div>
+
+    <div class="anx-flow mt-10 reveal">
+      <div class="anx-fcell">
+        <span class="anx-fnum">01 · count</span>
+        <h3 class="anx-fh">Count its tokens</h3>
+        <p class="anx-fp">As a node streams, it tallies prompt and completion tokens straight from the provider's usage fields — input and output kept separate, never estimated after the fact.</p>
+      </div>
+      <div class="anx-fcell">
+        <span class="anx-fnum">02 · price</span>
+        <h3 class="anx-fh">Price at its model</h3>
+        <p class="anx-fp">Each node already pins a provider and model, so it applies that model's exact input/output rate. Local models price at <span class="mono text-[12px] text-ink-2">$0.00</span> — but still report tokens.</p>
+      </div>
+      <div class="anx-fcell">
+        <span class="anx-fnum">03 · emit</span>
+        <h3 class="anx-fh">Emit a usage event</h3>
+        <p class="anx-fp">On completion the node emits a small usage record — node id, model, tokens, cost — onto the run's event stream, the same channel that drives live status dots.</p>
+      </div>
+      <div class="anx-fcell">
+        <span class="anx-fnum">04 · roll up</span>
+        <h3 class="anx-fh">Roll up to one view</h3>
+        <p class="anx-fp">The canvas aggregates every event into one dashboard — per node, per model, per provider, per run — so a twenty-node graph reads as a single, trustworthy number.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">live demo</span>
+      <h2 class="h2 mt-3">Run the graph. Watch the meters.</h2>
+      <p class="lead mt-4">Press Run. Each node meters its own tokens and cost as it fires; the dashboard rolls them up live into a per-model breakdown and one run total.</p>
+    </div>
+
+    <div class="anx-stage mt-10 border border-hair reveal" id="anxStage" style="transition-delay:.06s">
+      <!-- top bar -->
+      <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-11">
+        <span class="eyebrow">run · node-delegated cost</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="anxStatus"><span class="dot dot-idle" id="anxStatusDot"></span> <span id="anxStatusLabel">idle</span></span>
+      </div>
+
+      <div class="p-4 sm:p-6 border-b border-hair">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div class="flex items-center gap-2 text-[12px] mono text-ink-muted flex-1 min-w-0">
+            <span class="dot dot-run" aria-hidden="true"></span>
+            <span class="text-ink-2 truncate">Refactor &amp; document the billing service</span>
+            <span class="text-hair">·</span><span>6 nodes</span>
+          </div>
+          <button class="anx-run shrink-0" id="anxRun" type="button">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><path d="M3 2l9 5-9 5z"/></svg>
+            <span id="anxRunLabel">Run graph</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- split: live chain (left) / rolling dashboard (right) -->
+      <div class="anx-split">
+        <!-- LEFT: per-node meters -->
+        <div class="anx-pane">
+          <div class="flex items-center justify-between mb-3">
+            <span class="anx-dash-cap">per node · self-metered</span>
+            <span class="mono text-[10px] text-ink-muted">tokens · cost</span>
+          </div>
+          <div class="anx-meter" id="anxMeter">
+            <div class="anx-mrow" data-node="0">
+              <span class="dot dot-idle"></span>
+              <span class="anx-mname">Initialiser</span>
+              <span class="anx-mprov">trigger</span>
+              <span class="anx-mmeter"><span class="anx-mtok" data-tok>0 tok</span><span class="anx-mcost" data-cost>$0.00</span></span>
+            </div>
+            <div class="anx-mrow" data-node="1">
+              <span class="dot dot-idle"></span>
+              <span class="anx-mname">Investigate</span>
+              <span class="anx-mprov">gpt-4o</span>
+              <span class="anx-mmeter"><span class="anx-mtok" data-tok>0 tok</span><span class="anx-mcost" data-cost>$0.00</span></span>
+            </div>
+            <div class="anx-mrow" data-node="2">
+              <span class="dot dot-idle"></span>
+              <span class="anx-mname">Plan</span>
+              <span class="anx-mprov">claude-opus</span>
+              <span class="anx-mmeter"><span class="anx-mtok" data-tok>0 tok</span><span class="anx-mcost" data-cost>$0.00</span></span>
+            </div>
+            <div class="anx-mrow" data-node="3">
+              <span class="dot dot-idle"></span>
+              <span class="anx-mname">Create</span>
+              <span class="anx-mprov">llama-70b · local</span>
+              <span class="anx-mmeter"><span class="anx-mtok" data-tok>0 tok</span><span class="anx-mcost" data-cost>$0.00</span></span>
+            </div>
+            <div class="anx-mrow" data-node="4">
+              <span class="dot dot-idle"></span>
+              <span class="anx-mname">Doc</span>
+              <span class="anx-mprov">gemini-1.5-pro</span>
+              <span class="anx-mmeter"><span class="anx-mtok" data-tok>0 tok</span><span class="anx-mcost" data-cost>$0.00</span></span>
+            </div>
+            <div class="anx-mrow" data-node="5">
+              <span class="dot dot-idle"></span>
+              <span class="anx-mname">Review</span>
+              <span class="anx-mprov">gpt-4o</span>
+              <span class="anx-mmeter"><span class="anx-mtok" data-tok>0 tok</span><span class="anx-mcost" data-cost>$0.00</span></span>
+            </div>
+          </div>
+
+          <div class="anx-roll">
+            <span class="anx-roll-cap">rolled up</span>
+            <span class="anx-roll-tok" id="anxRollTok">0 tok</span>
+            <span class="anx-roll-cost" id="anxRollCost">$<span class="acc">0.00</span></span>
+          </div>
+        </div>
+
+        <!-- RIGHT: per-model dashboard -->
+        <div class="anx-pane">
+          <div class="flex items-center justify-between mb-1">
+            <span class="anx-dash-cap">dashboard · per model</span>
+            <span class="mono text-[10px] text-ink-muted" id="anxModelCount">4 models</span>
+          </div>
+
+          <div class="anx-bars" id="anxBars">
+            <div class="anx-brow" data-model="gpt-4o">
+              <div class="anx-btop">
+                <span class="anx-bname">gpt-4o <span class="anx-bprov">OpenAI</span></span>
+                <span class="anx-bcost" data-mcost>$0.00</span>
+              </div>
+              <div class="anx-bar"><span data-mbar></span></div>
+            </div>
+            <div class="anx-brow" data-model="claude-opus">
+              <div class="anx-btop">
+                <span class="anx-bname">claude-opus <span class="anx-bprov">Anthropic</span></span>
+                <span class="anx-bcost" data-mcost>$0.00</span>
+              </div>
+              <div class="anx-bar b2"><span data-mbar></span></div>
+            </div>
+            <div class="anx-brow" data-model="gemini-1.5-pro">
+              <div class="anx-btop">
+                <span class="anx-bname">gemini-1.5-pro <span class="anx-bprov">Google</span></span>
+                <span class="anx-bcost" data-mcost>$0.00</span>
+              </div>
+              <div class="anx-bar b3"><span data-mbar></span></div>
+            </div>
+            <div class="anx-brow" data-model="llama-70b">
+              <div class="anx-btop">
+                <span class="anx-bname">llama-70b <span class="anx-bprov">Local</span></span>
+                <span class="anx-bcost" data-mcost>$0.00</span>
+              </div>
+              <div class="anx-bar b4"><span data-mbar></span></div>
+            </div>
+          </div>
+
+          <div class="anx-stats">
+            <div class="anx-stat"><div class="anx-stat-k">run total</div><div class="anx-stat-v" id="anxStatTotal">$0.00</div></div>
+            <div class="anx-stat"><div class="anx-stat-k">tokens</div><div class="anx-stat-v" id="anxStatTok">0</div></div>
+            <div class="anx-stat"><div class="anx-stat-k">$ / 1k tok</div><div class="anx-stat-v" id="anxStatRate">$0.00</div></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="px-4 sm:px-6 py-4 mono text-[11px] text-ink-muted border-t border-hair">Local models cost $0.00 but still report tokens — usage stays visible even when spend is zero.</p>
+    </div>
+    <p class="sr-only" role="status" aria-live="polite" id="anxLive"></p>
+  </div>
+</section>
+
+<!-- ============ WHY IT MATTERS — bento ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">why it matters</span>
+      <h2 class="h2 mt-3">Know what every node costs.</h2>
+      <p class="lead mt-4">When cost lives on the node, you can see exactly where spend goes — and trim it without unwiring the graph.</p>
+    </div>
+
+    <div class="anx-bento mt-10 reveal">
+      <div class="anx-bcell" style="grid-column:span 7;">
+        <span class="eyebrow">attributable</span>
+        <p class="mt-3 text-[16px] text-ink-2 font-medium">Spend maps to the node that caused it.</p>
+        <p class="mt-3 text-[14px] leading-relaxed text-ink-body">A run total tells you what you paid, not <span class="text-ink-2">why</span>. If a <span class="mono text-[13px] text-ink-2">Create</span> node eats 60% of the bill, you see it on the bar in real time — then move it to a cheaper model, cap its tokens, or swap it local. Cost becomes a property you can edit, not a month-end surprise.</p>
+        <div class="mt-5 flex flex-wrap items-center gap-2 mono text-[11px]">
+          <span class="ctrl-chip">Investigate</span><span class="ctrl-arrow">→</span>
+          <span class="ctrl-chip ctrl-chip-accent">Create · 60%</span><span class="ctrl-arrow">→</span>
+          <span class="ctrl-chip">Review</span>
+        </div>
+      </div>
+      <div class="anx-bcell" style="grid-column:span 5;">
+        <span class="eyebrow">cross-provider</span>
+        <p class="mt-3 text-[16px] text-ink-2 font-medium">One number across four vendors.</p>
+        <p class="mt-3 text-[14px] leading-relaxed text-ink-body">OpenAI, Anthropic, Google, and your local models each bill differently — or not at all. The dashboard normalises them into one currency-true total, so a mixed-model graph reads as cleanly as a single-model one.</p>
+      </div>
+
+      <div class="anx-bcell" style="grid-column:span 4;">
+        <span class="eyebrow">parallel-safe</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Twenty agents, one tally.</p>
+        <p class="mt-3 text-[13px] leading-relaxed text-ink-body">Because metering is delegated, a <span class="mono text-[12px] text-ink-2">Parallel</span> fan-out of twenty agents each reports its own cost — and the <span class="mono text-[12px] text-ink-2">Merge</span> rolls them into the same total. No double counting.</p>
+      </div>
+      <div class="anx-bcell" style="grid-column:span 4;">
+        <span class="eyebrow">local-first</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Counted, never sent.</p>
+        <p class="mt-3 text-[13px] leading-relaxed text-ink-body">All accounting happens on your machine from the usage you already receive. No telemetry, no billing export to a third party — your spend data stays as local as your canvas.</p>
+      </div>
+      <div class="anx-bcell" style="grid-column:span 4;">
+        <span class="eyebrow">historical</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Every run is a row.</p>
+        <p class="mt-3 text-[13px] leading-relaxed text-ink-body">Each run's rollup is kept beside the graph, so you can compare what a workflow cost yesterday versus today after a model swap — and catch a price regression before it compounds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="flex items-end justify-between gap-6 reveal">
+      <div class="max-w-2xl">
+        <span class="eyebrow">related features</span>
+        <h2 class="h2 mt-3">Wire it to the rest.</h2>
+      </div>
+      <a href="../index.html#features" class="link-arrow hidden sm:inline-flex">
+        All features
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      </a>
+    </div>
+
+    <div class="rel-grid mt-8 reveal" style="transition-delay:.06s">
+      <a href="./model-hotswap.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+        <h3 class="feat-title">Model Hotswapping</h3>
+        <p class="feat-desc">Set provider + model per node and swap live — the meter reprices on the spot.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./local-models.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">offline</span></div>
+        <h3 class="feat-title">Local Models</h3>
+        <p class="feat-desc">Ollama, llama.cpp, LM Studio — zero-cost nodes that still report tokens.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./advanced-orchestration.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">control</span></div>
+        <h3 class="feat-title">Advanced Orchestration</h3>
+        <p class="feat-desc">Cap concurrency and tokens per node to keep the rolled-up cost in budget.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-8 sm:hidden">
+      All features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+          <li><a href="./model-hotswap.html" class="hover:text-ink-2 transition-colors">Model hotswap</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ DEMO + REVEAL SCRIPT ============ -->
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- reveal on scroll (IntersectionObserver-gated) ---- */
+  var reveals = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+  if(reduce || !('IntersectionObserver' in window)){
+    reveals.forEach(function(el){ el.classList.add('in'); });
+  } else {
+    var ro = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); ro.unobserve(e.target); } });
+    }, { rootMargin:'0px 0px -10% 0px', threshold:0.12 });
+    reveals.forEach(function(el){ ro.observe(el); });
+  }
+
+  /* ---- analytics demo: node-delegated cost tracking ---- */
+  // each node knows its own model, tokens, and unit cost; canvas rolls them up.
+  var NODES = [
+    { node:'Initialiser', model:null,            tok:0,     cost:0.000 },
+    { node:'Investigate', model:'gpt-4o',         tok:12400, cost:0.041 },
+    { node:'Plan',        model:'claude-opus',    tok:9100,  cost:0.072 },
+    { node:'Create',      model:'llama-70b',      tok:38700, cost:0.000 },
+    { node:'Doc',         model:'gemini-1.5-pro', tok:9800,  cost:0.018 },
+    { node:'Review',      model:'gpt-4o',         tok:6300,  cost:0.021 }
+  ];
+  // model → aggregate target
+  var MODELS = ['gpt-4o','claude-opus','gemini-1.5-pro','llama-70b'];
+
+  var stage = document.getElementById('anxStage');
+  var runBtn = document.getElementById('anxRun');
+  var runLabel = document.getElementById('anxRunLabel');
+  var statusDot = document.getElementById('anxStatusDot');
+  var statusLabel = document.getElementById('anxStatusLabel');
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#anxMeter .anx-mrow'));
+  var rollTok = document.getElementById('anxRollTok');
+  var rollCost = document.getElementById('anxRollCost');
+  var statTotal = document.getElementById('anxStatTotal');
+  var statTok = document.getElementById('anxStatTok');
+  var statRate = document.getElementById('anxStatRate');
+  var bars = Array.prototype.slice.call(document.querySelectorAll('#anxBars .anx-brow'));
+  var live = document.getElementById('anxLive');
+  var timers = [];
+  var running = false;
+
+  function at(ms, fn){ timers.push(setTimeout(fn, ms)); }
+  function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
+  function setStatus(state, label){
+    statusDot.className = 'dot ' + state;
+    statusLabel.textContent = label;
+    if(live) live.textContent = 'Run ' + label;
+  }
+  function fmtTok(n){ return n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'') + 'k tok' : n + ' tok'; }
+  function fmtTokPlain(n){ return n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'') + 'k' : String(n); }
+  function fmtCost(n){ return '$' + n.toFixed(2); }
+
+  // model totals as we roll up
+  var modelCost = {}, modelTok = {};
+  function resetModelAgg(){ MODELS.forEach(function(m){ modelCost[m]=0; modelTok[m]=0; }); }
+
+  function resetDemo(){
+    clearTimers();
+    rows.forEach(function(r){
+      r.classList.remove('is-active','is-done');
+      r.querySelector('.dot').className = 'dot dot-idle';
+      r.querySelector('[data-tok]').textContent = '0 tok';
+      r.querySelector('[data-cost]').textContent = '$0.00';
+    });
+    rollTok.textContent = '0 tok';
+    rollCost.innerHTML = '$<span class="acc">0.00</span>';
+    statTotal.textContent = '$0.00';
+    statTok.textContent = '0';
+    statRate.textContent = '$0.00';
+    bars.forEach(function(b){
+      b.querySelector('[data-mcost]').textContent = '$0.00';
+      b.querySelector('[data-mbar]').style.width = '0%';
+    });
+    resetModelAgg();
+    setStatus('dot-idle','idle');
+  }
+
+  function paintDashboard(totalCost){
+    // highest model cost = full bar
+    var max = 0.0001;
+    MODELS.forEach(function(m){ if(modelCost[m] > max) max = modelCost[m]; });
+    // local model has zero cost — give it a small token-weighted bar so it stays visible
+    bars.forEach(function(b){
+      var m = b.getAttribute('data-model');
+      var c = modelCost[m] || 0;
+      var w;
+      if(m === 'llama-70b'){
+        // weight zero-cost local by tokens so it never reads as nothing
+        var maxTok = 0.0001; MODELS.forEach(function(x){ if(modelTok[x] > maxTok) maxTok = modelTok[x]; });
+        w = Math.min(100, (modelTok[m] / maxTok) * 38);
+      } else {
+        w = Math.min(100, (c / max) * 100);
+      }
+      b.querySelector('[data-mcost]').textContent = fmtCost(c);
+      b.querySelector('[data-mbar]').style.width = w.toFixed(0) + '%';
+    });
+  }
+
+  function runDemo(){
+    if(running) return;
+    running = true;
+    resetDemo();
+    runBtn.disabled = true;
+    runLabel.textContent = 'Running…';
+    setStatus('dot-run pulse-run','running');
+
+    var step = reduce ? 0 : 1;
+    var totalTok = 0, totalCost = 0;
+
+    NODES.forEach(function(n, i){
+      // node starts
+      at(i * 620 * step, function(){
+        var r = rows[i];
+        r.classList.add('is-active');
+        r.querySelector('.dot').className = 'dot dot-run pulse-run';
+        setStatus('dot-run pulse-run','running · ' + n.node);
+      });
+      // node finishes → meters itself, emits usage, canvas rolls up
+      at((i * 620 + 380) * step, function(){
+        var r = rows[i];
+        r.classList.remove('is-active');
+        r.classList.add('is-done');
+        r.querySelector('.dot').className = 'dot dot-done';
+        r.querySelector('[data-tok]').textContent = fmtTok(n.tok);
+        r.querySelector('[data-cost]').textContent = fmtCost(n.cost);
+
+        totalTok += n.tok; totalCost += n.cost;
+        if(n.model){ modelCost[n.model] += n.cost; modelTok[n.model] += n.tok; }
+
+        rollTok.textContent = fmtTok(totalTok);
+        rollCost.innerHTML = '$<span class="acc">' + totalCost.toFixed(2) + '</span>';
+        statTotal.textContent = fmtCost(totalCost);
+        statTok.textContent = fmtTokPlain(totalTok);
+        statRate.textContent = totalTok ? '$' + ((totalCost / totalTok) * 1000).toFixed(3) : '$0.00';
+        paintDashboard(totalCost);
+      });
+    });
+
+    at((NODES.length * 620 + 120) * step, function(){
+      setStatus('dot-done','done · rolled up');
+      runBtn.disabled = false;
+      runLabel.textContent = 'Run again';
+      running = false;
+    });
+  }
+
+  if(runBtn) runBtn.addEventListener('click', runDemo);
+
+  // auto-run once when stage scrolls into view (motion-safe)
+  if(stage && !reduce && 'IntersectionObserver' in window){
+    var auto = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ auto.unobserve(e.target); at(400, runDemo); }
+      });
+    }, { threshold:0.35 });
+    auto.observe(stage);
+  } else if(stage && reduce){
+    // reduced-motion: paint a finished static state, no animation
+    var tT = 0, tC = 0;
+    resetModelAgg();
+    NODES.forEach(function(n,i){
+      var r = rows[i];
+      r.classList.add('is-done');
+      r.querySelector('.dot').className = 'dot dot-done';
+      r.querySelector('[data-tok]').textContent = fmtTok(n.tok);
+      r.querySelector('[data-cost]').textContent = fmtCost(n.cost);
+      tT += n.tok; tC += n.cost;
+      if(n.model){ modelCost[n.model] += n.cost; modelTok[n.model] += n.tok; }
+    });
+    rollTok.textContent = fmtTok(tT);
+    rollCost.innerHTML = '$<span class="acc">' + tC.toFixed(2) + '</span>';
+    statTotal.textContent = fmtCost(tC);
+    statTok.textContent = fmtTokPlain(tT);
+    statRate.textContent = '$' + ((tC / tT) * 1000).toFixed(3);
+    paintDashboard(tC);
+    setStatus('dot-done','done · rolled up');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Directive Model Control (MODELS.md)</title>
+<meta name="description" content="Control every aspect of your models from a single MODELS.md file: system prompts, temperature, tool access, routing, fallbacks, and per-node overrides — versioned with your project. One file governs every node on the canvas." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<style>
+  /* ===== Page-local: MODELS.md directive demo ===== */
+  .mdwin{background:#fafafa;border:1px solid #eaeaea;}
+  .mdwin-bar{border-bottom:1px solid #eaeaea;background:#fff;}
+  .md-code{font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.95;}
+  .md-ln{color:#b3b3b3;user-select:none;width:2ch;text-align:right;display:inline-block;margin-right:14px;flex:none;}
+  .md-row{display:flex;align-items:flex-start;padding:0 14px;}
+  .md-row.is-on{background:rgba(99,91,255,0.05);box-shadow:inset 2px 0 0 #635bff;}
+  .md-key{color:#4f48d6;}
+  .md-str{color:#15803d;}
+  .md-num{color:#b06d05;}
+  .md-cmt{color:#a3a3a3;}
+  .md-head{color:#0a0a0a;font-weight:500;}
+
+  /* directive toggle rail */
+  .dir-toggle{display:flex;align-items:center;gap:10px;border:1px solid #eaeaea;background:#fff;
+    padding:9px 11px;cursor:pointer;text-align:left;width:100%;min-height:44px;
+    transition:border-color .15s var(--ease-hover),background .15s var(--ease-hover);}
+  .dir-toggle:hover{border-color:#d6d6d6;}
+  .dir-toggle.on{border-color:#635bff66;background:rgba(99,91,255,0.05);}
+  .dir-sw{width:30px;height:16px;background:#e2e2e2;flex:none;position:relative;transition:background .18s var(--ease-hover);}
+  .dir-sw::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;background:#fff;
+    box-shadow:0 1px 2px rgba(10,10,10,.2);transition:transform .18s var(--ease-hover);}
+  .dir-toggle.on .dir-sw{background:#635bff;}
+  .dir-toggle.on .dir-sw::after{transform:translateX(14px);}
+  .dir-name{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+  .dir-desc{font-size:11px;color:#737373;line-height:1.35;margin-top:1px;}
+
+  /* node chips that react to the directives */
+  .md-node{position:relative;background:#fff;border:1px solid #eaeaea;padding:11px 12px;
+    transition:border-color .25s,box-shadow .25s,background .25s;}
+  .md-node .nlabel{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+  .md-node.lit{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.07);}
+  .md-attr{font-family:'Geist Mono',monospace;font-size:11px;color:#737373;letter-spacing:0;
+    border:1px solid #eaeaea;background:#fafafa;padding:2px 6px;transition:all .25s;}
+  .md-attr.hot{color:#4f48d6;border-color:#635bff44;background:rgba(99,91,255,0.06);}
+  .md-attr.warn{color:#b06d05;border-color:#f59e0b55;background:rgba(245,158,11,0.06);}
+  .md-attr.over{color:#15803d;border-color:#16a34a55;background:rgba(22,163,74,0.06);}
+
+  /* applied flash on the apply button */
+  @keyframes mdApply{0%{transform:scale(1);}40%{transform:scale(.97);}100%{transform:scale(1);}}
+  .md-applied{animation:mdApply .3s var(--ease-out);}
+
+  /* current feature marked active in the nav menu */
+  .nav-mega-link.is-active{color:#0a0a0a;background:#f2f2f3;font-weight:500;}
+  .nav-acc-link.is-active{color:#0a0a0a;font-weight:500;}
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- ============ NAV BEHAVIOR (inline — feature pages don't load ../app.js) ============ -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(hover: none)').matches;
+
+  /* Scroll state: opaque white/blur bg + hairline past ~8px */
+  var nav = document.getElementById('nav');
+  if (nav) {
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /* Desktop Features mega-menu (hover-intent on pointer devices, click everywhere) */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  if (wrap && btn && menu) {
+    var openTimer = null, closeTimer = null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded', 'true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded', 'false');
+      menu.setAttribute('hidden', '');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if (!isTouch) {
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer = setTimeout(open, 60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer = setTimeout(close, 140); });
+    }
+    document.addEventListener('click', function(e){ if (isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && isOpen()) { close(); btn.focus(); } });
+    menu.addEventListener('click', function(e){ if (e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle + accordion */
+  var toggle = document.getElementById('navToggle');
+  var sheet = document.getElementById('mobileMenu');
+  var openIcon = document.getElementById('navOpenIcon');
+  var closeIcon = document.getElementById('navCloseIcon');
+  if (toggle && sheet) {
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if (openIcon) openIcon.classList.toggle('hidden', o);
+      if (closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click', function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && !sheet.classList.contains('hidden')) { setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if (window.innerWidth >= 768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    var accBtn = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if (accBtn && accPanel) {
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen"></div>
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <a href="../index.html#features" class="link-arrow reveal text-[13px] mb-7" style="--tw:0">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      Back to all features
+    </a>
+
+    <div class="max-w-3xl">
+      <span class="eyebrow reveal" style="transition-delay:.02s">models · MODELS.md</span>
+
+      <h1 class="h1 mt-5 reveal" style="transition-delay:.05s">Directive Model Control.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        Control <span class="text-ink-2">every</span> aspect of your models from a single <span class="mono text-ink-2">MODELS.md</span> file — system prompts, temperature, tool access, routing, fallbacks, and per&#8209;node overrides. One declarative document, versioned right next to your canvas.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span>
+        <span class="badge"><span class="mono">MODELS.md</span></span>
+        <span class="badge">Versioned with your project</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT IS — deep explanation ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-16">
+      <div class="reveal">
+        <span class="eyebrow">what it is</span>
+        <h2 class="h2 mt-3">One file. Every model decision.</h2>
+        <p class="lead mt-4">A single <span class="mono text-ink-2">MODELS.md</span> at the project root declares system prompts, temperature, tool access, routing, and fallbacks for every node — instead of settings scattered across node inspectors where they can't be diffed and quietly drift.</p>
+        <p class="mt-4 text-[15px] leading-relaxed text-ink-body">Defaults at the top apply to the whole canvas. Per&#8209;node blocks override only what they name — a sharper prompt for <span class="mono text-ink-2">Review</span>, zero temperature for <span class="mono text-ink-2">Evaluate</span>, a narrowed tool set for <span class="mono text-ink-2">Apply</span>. It's a plain file, so it commits with your graph and reviews like code.</p>
+      </div>
+
+      <!-- bento of the six directive families -->
+      <div class="bento-wrap reveal" style="transition-delay:.06s">
+        <div class="bento" style="grid-template-columns:repeat(2,1fr);">
+          <div class="cell"><span class="eyebrow">prompts</span><p class="mt-2 text-[14px] text-ink-2 font-medium">System prompts</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">Set the role + guardrails per node, or one shared default for the whole canvas.</p></div>
+          <div class="cell"><span class="eyebrow">sampling</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Temperature &amp; params</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">temperature, top_p, max_tokens — declarative, never buried in an inspector.</p></div>
+          <div class="cell"><span class="eyebrow">tools</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Tool access</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">Allow- and deny-list tools per node. <span class="mono">Apply</span> writes; <span class="mono">Investigate</span> only reads.</p></div>
+          <div class="cell"><span class="eyebrow">routing</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Model routing</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">Route node classes to providers — cheap model for drafts, frontier for review.</p></div>
+          <div class="cell"><span class="eyebrow">resilience</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Fallbacks</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">An ordered chain: if the primary errors or rate-limits, the next model takes over.</p></div>
+          <div class="cell"><span class="eyebrow">precision</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Per-node overrides</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">A node block overrides only the keys it names; everything else inherits defaults.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO — MODELS.md drives the canvas ============ -->
+<section class="border-b border-hair bg-[#fafafa] relative overflow-hidden">
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(99,91,255,0.05), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">interactive · the directive editor</span>
+      <h2 class="h2 mt-3">Toggle a directive. Watch the canvas obey.</h2>
+      <p class="lead mt-4">Flip a directive on the left — the <span class="mono text-ink-2">MODELS.md</span> source rewrites itself and the nodes re-resolve their config, exactly as the file governs a live run.</p>
+    </div>
+
+    <div class="mt-10 grid lg:grid-cols-[0.92fr_1.08fr] gap-px bg-hair border border-hair reveal" id="mdDemo" style="transition-delay:.06s">
+
+      <!-- LEFT: directive toggles + resolved nodes -->
+      <div class="bg-white p-5 sm:p-6 flex flex-col">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">directives</span>
+          <span id="mdApplyBtn" class="inline-flex items-center border border-hair bg-white h-9 px-3 text-[13px] mono text-ink-muted" role="status" aria-live="polite">
+            <span class="dot dot-done mr-1.5"></span><span id="mdApplyLabel">applied · in sync</span>
+          </span>
+        </div>
+
+        <div class="mt-4 grid gap-2" id="dirRail" role="group" aria-label="MODELS.md directives">
+          <button class="dir-toggle on" data-dir="prompt" aria-pressed="true">
+            <span class="dir-sw" aria-hidden="true"></span>
+            <span><span class="dir-name">system_prompt</span><span class="dir-desc">Review gets a strict reviewer persona</span></span>
+          </button>
+          <button class="dir-toggle on" data-dir="temp" aria-pressed="true">
+            <span class="dir-sw" aria-hidden="true"></span>
+            <span><span class="dir-name">temperature</span><span class="dir-desc">Evaluate pinned to 0 for deterministic scoring</span></span>
+          </button>
+          <button class="dir-toggle on" data-dir="tools" aria-pressed="true">
+            <span class="dir-sw" aria-hidden="true"></span>
+            <span><span class="dir-name">tools</span><span class="dir-desc">Apply may write_file; Investigate read-only</span></span>
+          </button>
+          <button class="dir-toggle" data-dir="route" aria-pressed="false">
+            <span class="dir-sw" aria-hidden="true"></span>
+            <span><span class="dir-name">routing</span><span class="dir-desc">Create routes to a cheaper draft model</span></span>
+          </button>
+          <button class="dir-toggle" data-dir="fallback" aria-pressed="false">
+            <span class="dir-sw" aria-hidden="true"></span>
+            <span><span class="dir-name">fallback</span><span class="dir-desc">Plan falls back to Google on rate-limit</span></span>
+          </button>
+        </div>
+
+        <!-- resolved node chain -->
+        <div class="mt-6">
+          <span class="eyebrow">resolved on canvas</span>
+          <div class="mt-3 grid gap-2.5" id="mdNodes">
+            <div class="md-node" data-node="investigate">
+              <div class="flex items-center gap-2">
+                <span class="dot dot-idle"></span><span class="nlabel">Investigate</span>
+                <span class="ml-auto mono text-[11px] text-ink-muted" data-model>gpt-4o</span>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-1.5" data-attrs></div>
+            </div>
+            <div class="md-node" data-node="plan">
+              <div class="flex items-center gap-2">
+                <span class="dot dot-idle"></span><span class="nlabel">Plan</span>
+                <span class="ml-auto mono text-[11px] text-ink-muted" data-model>claude-opus</span>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-1.5" data-attrs></div>
+            </div>
+            <div class="md-node" data-node="create">
+              <div class="flex items-center gap-2">
+                <span class="dot dot-idle"></span><span class="nlabel">Create</span>
+                <span class="ml-auto mono text-[11px] text-ink-muted" data-model>gpt-4o</span>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-1.5" data-attrs></div>
+            </div>
+            <div class="md-node" data-node="evaluate">
+              <div class="flex items-center gap-2">
+                <span class="dot dot-idle"></span><span class="nlabel">Evaluate</span>
+                <span class="ml-auto mono text-[11px] text-ink-muted" data-model>claude-opus</span>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-1.5" data-attrs></div>
+            </div>
+            <div class="md-node" data-node="apply">
+              <div class="flex items-center gap-2">
+                <span class="dot dot-idle"></span><span class="nlabel">Apply</span>
+                <span class="ml-auto mono text-[11px] text-ink-muted" data-model>gpt-4o</span>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-1.5" data-attrs></div>
+            </div>
+            <div class="md-node" data-node="review">
+              <div class="flex items-center gap-2">
+                <span class="dot dot-idle"></span><span class="nlabel">Review</span>
+                <span class="ml-auto mono text-[11px] text-ink-muted" data-model>claude-opus</span>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-1.5" data-attrs></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: the live MODELS.md source -->
+      <div class="bg-white flex flex-col">
+        <div class="mdwin-bar flex items-center justify-between px-4 h-11">
+          <div class="flex items-center gap-2">
+            <span class="term-dot" aria-hidden="true"></span>
+            <span class="mono text-[12px] text-ink-2">MODELS.md</span>
+          </div>
+          <span class="mono text-[11px] text-ink-muted flex items-center gap-2"><span class="dot dot-run" id="mdLiveDot"></span> versioned · main</span>
+        </div>
+        <div class="md-code py-3 overflow-x-auto flex-1" id="mdCode" aria-label="MODELS.md source, updates as you toggle directives"></div>
+        <div class="mdwin-bar border-t border-b-0 flex items-center justify-between px-4 h-10" style="border-bottom:0;border-top:1px solid #eaeaea;">
+          <span class="mono text-[11px] text-ink-muted">resolved at load · merged over defaults</span>
+          <span class="mono text-[11px] text-ink-muted" id="mdLineCount"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT RESOLVES — cascade explainer ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">Defaults cascade. Nodes override.</h2>
+      <p class="lead mt-4">Resolution is a three-step merge the runtime runs once, when the canvas loads.</p>
+    </div>
+
+    <div class="mt-10 grid md:grid-cols-3 gap-px bg-hair border border-hair reveal">
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] text-accent">01</span>
+        <h3 class="h3 mt-3">Read defaults</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">The <span class="mono text-ink-2">[defaults]</span> block sets provider, model, temperature, and the base tool set for every node on the canvas.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] text-accent">02</span>
+        <h3 class="h3 mt-3">Merge node blocks</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">Each <span class="mono text-ink-2">[node.*]</span> block overrides only the keys it names — a sharper prompt for <span class="mono">Review</span>, <span class="mono">temperature: 0</span> for <span class="mono">Evaluate</span>.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] text-accent">03</span>
+        <h3 class="h3 mt-3">Bind fallbacks</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">Ordered <span class="mono text-ink-2">fallback</span> chains attach so a rate-limit or error rolls the node to the next model — mid-run, without a stall.</p>
+      </div>
+    </div>
+
+    <!-- why it matters -->
+    <div class="mt-10 grid md:grid-cols-3 gap-px bg-hair border border-hair reveal">
+      <div class="bg-white p-6">
+        <span class="eyebrow">reviewable</span>
+        <p class="mt-3 text-[14px] text-ink-2 font-medium">Diffs like code</p>
+        <p class="mt-2 text-[13px] text-ink-body leading-relaxed">A prompt tweak or a routing change is one line in a PR — no hunting through node inspectors.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="eyebrow">portable</span>
+        <p class="mt-3 text-[14px] text-ink-2 font-medium">Travels with the repo</p>
+        <p class="mt-2 text-[13px] text-ink-body leading-relaxed">Clone the project, get the exact model setup. No dashboard state to recreate, nothing to wire by hand.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="eyebrow">consistent</span>
+        <p class="mt-3 text-[14px] text-ink-2 font-medium">One source of truth</p>
+        <p class="mt-2 text-[13px] text-ink-body leading-relaxed">Defaults stop drift across dozens of nodes. Change the model once; every node that inherits follows.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="flex items-center gap-4 reveal">
+      <span class="eyebrow">related features</span>
+      <span class="feat-rule"></span>
+    </div>
+
+    <div class="feat-grid mt-8 reveal" style="transition-delay:.05s">
+      <a href="./model-hotswap.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+        <h3 class="feat-title">Model Hotswapping</h3>
+        <p class="feat-desc">Set provider + model per node and swap live, mid-run.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./local-models.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">offline</span></div>
+        <h3 class="feat-title">Local Models</h3>
+        <p class="feat-desc">Ollama, llama.cpp, LM Studio — fully local, alongside the cloud.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./git-backed-canvas.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">versioned</span></div>
+        <h3 class="feat-title">Git-backed Canvas</h3>
+        <p class="feat-desc">Every workflow is a file — commit, diff, and review like code.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-9">
+      Back to all features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Models</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="./model-hotswap.html" class="hover:text-ink-2 transition-colors">Model Hotswapping</a></li>
+          <li><a href="./local-models.html" class="hover:text-ink-2 transition-colors">Local Models</a></li>
+          <li><a href="./models-md-directive.html" class="hover:text-ink-2 transition-colors">Directive Model Control</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ REVEAL OBSERVER (IntersectionObserver, reduced-motion safe) ============ -->
+<script>
+(function(){
+  var els=[].slice.call(document.querySelectorAll('.reveal'));
+  if(!els.length)return;
+  if(!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    els.forEach(function(el){el.classList.add('in');});return;
+  }
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  },{rootMargin:'0px 0px -8% 0px',threshold:0.05});
+  els.forEach(function(el){io.observe(el);});
+})();
+</script>
+
+<!-- ============ MODELS.md DIRECTIVE DEMO ============ -->
+<script>
+(function(){
+  var demo=document.getElementById('mdDemo');
+  if(!demo)return;
+  var rail=document.getElementById('dirRail');
+  var code=document.getElementById('mdCode');
+  var lineCount=document.getElementById('mdLineCount');
+  var applyBtn=document.getElementById('mdApplyBtn');
+  var applyLabel=document.getElementById('mdApplyLabel');
+  var nodesWrap=document.getElementById('mdNodes');
+
+  // directive state
+  var state={prompt:true,temp:true,tools:true,route:false,fallback:false};
+
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  // Build the MODELS.md source lines from current state.
+  // Each line: {t:'head'|'key'|'cmt'|'plain', lit:directiveKey}
+  function buildLines(){
+    var L=[];
+    function push(o){L.push(o);}
+    push({txt:'# MODELS.md — directive model control'});
+    push({txt:''});
+    push({txt:'[defaults]',h:1});
+    push({k:'provider',v:'"openai"'});
+    push({k:'model',v:'"gpt-4o"'});
+    push({k:'temperature',v:'0.4',num:1});
+    push({k:'tools',v:'["web_search", "read_file"]'});
+    push({txt:''});
+
+    if(state.route){
+      push({txt:'[route]',h:1,lit:'route'});
+      push({k:'draft',v:'"gpt-4o-mini"',lit:'route'});
+      push({k:'frontier',v:'"claude-opus"',lit:'route'});
+      push({txt:''});
+    }
+
+    push({txt:'[node.Plan]',h:1});
+    push({k:'model',v:'"claude-opus"'});
+    if(state.fallback){
+      push({k:'fallback',v:'["claude-opus", "gemini-1.5-pro"]',lit:'fallback'});
+    }
+    push({txt:''});
+
+    push({txt:'[node.Create]',h:1});
+    if(state.route){
+      push({k:'route',v:'"draft"',lit:'route'});
+    } else {
+      push({k:'model',v:'"gpt-4o"'});
+    }
+    push({txt:''});
+
+    if(state.temp){
+      push({txt:'[node.Evaluate]',h:1,lit:'temp'});
+      push({k:'temperature',v:'0',num:1,lit:'temp'});
+      push({txt:''});
+    }
+
+    if(state.tools){
+      push({txt:'[node.Apply]',h:1,lit:'tools'});
+      push({k:'tools',v:'["read_file", "write_file"]',lit:'tools'});
+      push({txt:''});
+    }
+
+    if(state.prompt){
+      push({txt:'[node.Review]',h:1,lit:'prompt'});
+      push({k:'system_prompt',v:'"""',lit:'prompt'});
+      push({txt:'  You are a strict reviewer. Block on any',cont:1,lit:'prompt'});
+      push({txt:'  unverified claim or unsafe write.',cont:1,lit:'prompt'});
+      push({txt:'"""',cont:1,lit:'prompt'});
+    }
+    return L;
+  }
+
+  function renderCode(){
+    var L=buildLines();
+    var html='';var n=0;
+    L.forEach(function(o){
+      n++;
+      var ln='<span class="md-ln">'+n+'</span>';
+      var body;
+      if(o.txt!==undefined){
+        if(o.h){ body='<span class="md-head">'+esc(o.txt)+'</span>'; }
+        else if(o.cont){ body='<span class="md-str">'+esc(o.txt)+'</span>'; }
+        else if(o.txt.indexOf('#')===0){ body='<span class="md-cmt">'+esc(o.txt)+'</span>'; }
+        else { body=esc(o.txt)||'&nbsp;'; }
+      } else {
+        var vc = o.num ? 'md-num' : 'md-str';
+        body='<span class="md-key">'+esc(o.k)+'</span><span class="md-cmt"> = </span><span class="'+vc+'">'+esc(o.v)+'</span>';
+      }
+      var cls='md-row'+(o.lit?' is-on':'');
+      html+='<div class="'+cls+'" data-lit="'+(o.lit||'')+'">'+ln+'<span style="min-width:0">'+body+'</span></div>';
+    });
+    code.innerHTML=html;
+    lineCount.textContent=n+' lines';
+  }
+
+  // resolve each node's attribute chips from state
+  function chip(text,kind){ return '<span class="md-attr'+(kind?' '+kind:'')+'">'+text+'</span>'; }
+
+  function renderNodes(){
+    var map={
+      investigate:function(){
+        return chip('temp 0.4')+chip('web_search · read_file')+chip('inherits default');
+      },
+      plan:function(){
+        var c=chip('claude-opus');
+        c+= state.fallback ? chip('→ gemini-1.5-pro','warn') : chip('no fallback');
+        return c;
+      },
+      create:function(){
+        if(state.route) return chip('route: draft','hot')+chip('gpt-4o-mini','hot')+chip('temp 0.4');
+        return chip('gpt-4o')+chip('temp 0.4');
+      },
+      evaluate:function(){
+        if(state.temp) return chip('temp 0','over')+chip('deterministic','over');
+        return chip('temp 0.4')+chip('inherits default');
+      },
+      apply:function(){
+        if(state.tools) return chip('read_file · write_file','hot')+chip('can write','hot');
+        return chip('web_search · read_file')+chip('inherits default');
+      },
+      review:function(){
+        if(state.prompt) return chip('strict reviewer','hot')+chip('system_prompt','hot')+chip('gates run');
+        return chip('default prompt')+chip('claude-opus');
+      }
+    };
+    var nodes=nodesWrap.querySelectorAll('.md-node');
+    nodes.forEach(function(node){
+      var key=node.getAttribute('data-node');
+      var attrs=node.querySelector('[data-attrs]');
+      attrs.innerHTML=map[key]?map[key]():'';
+      // model label updates for routed Create
+      var ml=node.querySelector('[data-model]');
+      if(key==='create' && ml) ml.textContent = state.route ? 'gpt-4o-mini' : 'gpt-4o';
+      // lit ring if this node is currently overridden by an active directive
+      var litMap={investigate:false,plan:state.fallback,create:state.route,evaluate:state.temp,apply:state.tools,review:state.prompt};
+      node.classList.toggle('lit', !!litMap[key]);
+    });
+  }
+
+  var applyDot=applyBtn.querySelector('.dot');
+  var syncTimer;
+  function flashApply(){
+    applyBtn.classList.remove('md-applied');
+    void applyBtn.offsetWidth;
+    applyBtn.classList.add('md-applied');
+    if(applyDot){applyDot.classList.remove('dot-done');applyDot.classList.add('dot-run');}
+    applyLabel.textContent='resolving…';
+    clearTimeout(syncTimer);
+    syncTimer=setTimeout(function(){
+      if(applyDot){applyDot.classList.remove('dot-run');applyDot.classList.add('dot-done');}
+      applyLabel.textContent='applied · in sync';
+    },420);
+  }
+
+  function update(){ renderCode(); renderNodes(); flashApply(); }
+
+  // wire toggles
+  rail.querySelectorAll('.dir-toggle').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var dir=btn.getAttribute('data-dir');
+      state[dir]=!state[dir];
+      btn.classList.toggle('on',state[dir]);
+      btn.setAttribute('aria-pressed',String(state[dir]));
+      update();
+    });
+  });
+
+  // initial paint
+  renderCode(); renderNodes();
+})();
+</script>
+
+</body>
+</html>

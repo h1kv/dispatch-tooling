@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Testing Pipeline Nodes</title>
+<meta name="description" content="Drop dedicated Test nodes into the chain that instruct the models how to test — so you know the entire execution chain before a model touches a single line of code. Part of DISPATCH.AI, the open-source (MIT) visual canvas for AI agent workflows." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<!-- Page-local styles for the Testing-node demo (square, hairline, on-brand) -->
+<style>
+  /* status chip in hero */
+  .status-chip{display:inline-flex;align-items:center;gap:7px;
+    font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;
+    color:#737373;border:1px solid #eaeaea;background:#fff;padding:5px 10px;line-height:1;}
+  .status-chip .sdot{width:7px;height:7px;border-radius:9999px !important;background:#737373;flex:none;}
+
+  /* test-node accent variant (distinct from green done / accent running) */
+  .node.is-test{border-color:#635bff66;}
+  .node.is-pass{border-color:#16a34a55;box-shadow:0 0 0 3px rgba(22,163,74,0.07);}
+  .node.is-fail{border-color:#ef444455;box-shadow:0 0 0 3px rgba(239,68,68,0.08);}
+  .tn-chain .dot-test{background:#635bff;}
+
+  /* the demo stage */
+  .tn-stage{background:#fff;border:1px solid #eaeaea;}
+  .tn-bar{display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid #eaeaea;padding:0 18px;height:46px;background:#fafafa;}
+  .tn-body{padding:22px 18px 24px;}
+
+  /* the chain rail */
+  .tn-chain{position:relative;max-width:300px;margin:0 auto;}
+  .tn-chain-edges{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;}
+  .tn-chain-nodes{position:relative;display:flex;flex-direction:column;gap:22px;}
+
+  /* a test-node row: label + the assertion it carries */
+  .tn-assert{font-family:'Geist Mono',monospace;font-size:11px;color:#737373;letter-spacing:0;}
+
+  /* the gate verdict pill */
+  .tn-verdict{display:inline-flex;align-items:center;gap:7px;
+    font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;
+    border:1px solid #eaeaea;background:#fff;color:#737373;padding:4px 9px;line-height:1;}
+  .tn-verdict.is-pass{color:#15803d;border-color:#16a34a44;background:rgba(22,163,74,0.05);}
+  .tn-verdict.is-fail{color:#c0322a;border-color:#ef444455;background:rgba(239,68,68,0.05);}
+  .tn-verdict .vdot{width:6px;height:6px;border-radius:9999px !important;background:#737373;flex:none;}
+  .tn-verdict.is-pass .vdot{background:#16a34a;}
+  .tn-verdict.is-fail .vdot{background:#ef4444;}
+
+  /* spec card: what a Test node instructs */
+  .spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  @media (max-width:760px){ .spec-grid{grid-template-columns:1fr;} }
+  .spec-cell{background:#fff;padding:18px 18px 20px;}
+  .spec-k{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#737373;}
+  .spec-v{margin-top:9px;font-size:13.5px;line-height:1.55;color:#595959;}
+  .spec-v code{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;background:#fafafa;border:1px solid #eaeaea;padding:1px 5px;}
+
+  /* bento for "how it works" */
+  .tn-bento{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  @media (max-width:840px){ .tn-bento{grid-template-columns:1fr;} }
+  .tn-tile{background:#fff;padding:22px;display:flex;flex-direction:column;}
+  .tn-tile .num{font-family:'Geist Mono',monospace;font-size:11px;color:#635bff;letter-spacing:0.08em;}
+  .tn-tile h3{margin-top:12px;font-size:16px;font-weight:600;letter-spacing:-0.02em;color:#0a0a0a;line-height:1.2;}
+  .tn-tile p{margin-top:9px;font-size:13.5px;line-height:1.55;color:#595959;}
+
+  /* control buttons for the demo */
+  .tn-btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;
+    font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:0.02em;cursor:pointer;
+    border:1px solid #eaeaea;background:#fff;color:#171717;
+    transition:border-color .15s var(--ease-hover),background .15s var(--ease-hover),color .15s;}
+  .tn-btn:hover{border-color:#d6d6d6;background:#fafafa;}
+  .tn-btn:focus-visible{outline:2px solid #635bff;outline-offset:2px;}
+  .tn-btn-accent{border-color:#635bff;background:#635bff;color:#fff;}
+  .tn-btn-accent:hover{background:#5a52e8;border-color:#5a52e8;}
+
+  /* readout log */
+  .tn-log{margin-top:18px;border:1px solid #eaeaea;background:#fafafa;
+    font-family:'Geist Mono',monospace;font-size:12px;line-height:1.85;color:#595959;
+    padding:12px 14px;min-height:118px;}
+  .tn-log .ok{color:#15803d;}
+  .tn-log .bad{color:#c0322a;}
+  .tn-log .acc{color:#635bff;}
+  .tn-log .mut{color:#a3a3a3;}
+
+  /* related row */
+  .rel-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  @media (max-width:760px){ .rel-grid{grid-template-columns:1fr;} }
+
+  /* current-page emphasis in the Features menu */
+  .nav-mega-link.is-active{color:#0a0a0a;font-weight:500;background:#f5f5f7;}
+  .nav-acc-link.is-active{color:#0a0a0a;font-weight:500;}
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV (canonical — matches landing) ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Inline nav behavior (feature pages don't load ../app.js): scroll-opacity + mega-menu + mobile sheet + accordion -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(hover: none)').matches;
+
+  /* Scroll state: opaque past ~8px (white/blur bg + hairline) */
+  var nav = document.getElementById('nav');
+  if(nav){
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll(); window.addEventListener('scroll', onScroll, { passive:true });
+  }
+
+  /* Desktop Features mega-menu */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn  = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  if(wrap && btn && menu){
+    var openTimer=null, closeTimer=null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menu.setAttribute('hidden','');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if(!isTouch){
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer=setTimeout(open,60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer=setTimeout(close,140); });
+    }
+    document.addEventListener('click', function(e){ if(isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && isOpen()){ close(); btn.focus(); } });
+    menu.addEventListener('click', function(e){ if(e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle */
+  var toggle = document.getElementById('navToggle');
+  var sheet  = document.getElementById('mobileMenu');
+  var openIcon  = document.getElementById('navOpenIcon');
+  var closeIcon = document.getElementById('navCloseIcon');
+  if(toggle && sheet){
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if(openIcon) openIcon.classList.toggle('hidden', o);
+      if(closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click', function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key==='Escape' && !sheet.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if(window.innerWidth>=768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    /* Mobile Features accordion */
+    var accBtn   = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if(accBtn && accPanel){
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen" aria-hidden="true"></div>
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <a href="../index.html#features" class="link-arrow text-[13px] reveal" style="--ease:0">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      Back to all features
+    </a>
+
+    <div class="max-w-3xl mt-6">
+      <span class="eyebrow reveal">orchestration · node: test #1</span>
+      <h1 class="h1 mt-4 reveal" style="transition-delay:.05s">Testing Pipeline Nodes</h1>
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        A <span class="text-ink-2">Test</span> node is a first-class node you drop into the chain. It carries an assertion
+        the run must satisfy to continue — so you see the whole verification contract <span class="text-ink-2">before</span>
+        a model touches a single line of code.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <span class="status-chip"><span class="sdot"></span> Planning</span>
+        <span class="mono text-[12px] text-ink-muted">assert before run · gates the chain</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEEP EXPLANATION ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">what it is</span>
+      <h2 class="h2 mt-3">An assertion, wired in as a node.</h2>
+      <p class="lead mt-4">
+        Most agents "test" <em>after</em> the model has written and run code — you find out it was wrong once the
+        damage is done. DISPATCH inverts that. A <span class="text-ink-2">Test node</span> carries a plain-language
+        instruction the upstream models read, and an assertion the run must satisfy to continue. Four fields:
+      </p>
+    </div>
+
+    <!-- what a Test node carries -->
+    <div class="spec-grid mt-10 reveal" style="transition-delay:.05s">
+      <div class="spec-cell">
+        <span class="spec-k">instruction</span>
+        <p class="spec-v">Plain-language intent the upstream models read as part of their brief — <code>"auth must reject an expired token"</code>. They plan <em>toward</em> it.</p>
+      </div>
+      <div class="spec-cell">
+        <span class="spec-k">assertion</span>
+        <p class="spec-v">A concrete check on any output — <code>exit_code == 0</code>, <code>contains("401")</code>, <code>schema.valid</code>, or a graded rubric. Pass or fail, nothing fuzzy.</p>
+      </div>
+      <div class="spec-cell">
+        <span class="spec-k">target</span>
+        <p class="spec-v">Which upstream node it inspects — the output of <code>Create</code>, the diff from <code>Apply</code>, the plan from <code>Plan</code>.</p>
+      </div>
+      <div class="spec-cell">
+        <span class="spec-k">gate</span>
+        <p class="spec-v">On fail it can <span class="text-ink-2">block</span>, <span class="text-ink-2">loop back</span> to the producing node, or <span class="text-ink-2">branch</span> to repair — like any control edge.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — 3 tiles ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">Place, instruct, gate.</h2>
+      <p class="lead mt-4">Output flows in, a verdict flows out — like any node, except its job is to assert, not generate.</p>
+    </div>
+
+    <div class="tn-bento mt-10 reveal" style="transition-delay:.05s">
+      <div class="tn-tile">
+        <span class="num">01</span>
+        <h3>Drop it in the chain</h3>
+        <p>Place <span class="mono text-[12.5px]">NODE: TEST #1</span> after any node you want verified — between <span class="mono text-[12.5px]">Create</span> and <span class="mono text-[12.5px]">Apply</span>, or after a <span class="mono text-[12.5px]">Merge</span>. It wires top-to-bottom like the rest.</p>
+      </div>
+      <div class="tn-tile">
+        <span class="num">02</span>
+        <h3>Instruct the models</h3>
+        <p>Write the test intent in plain language. Upstream <span class="mono text-[12.5px]">Plan</span> and <span class="mono text-[12.5px]">Create</span> nodes read it as part of their brief and build toward passing it — testable-by-design.</p>
+      </div>
+      <div class="tn-tile">
+        <span class="num">03</span>
+        <h3>Gate the downstream</h3>
+        <p>At run time the node evaluates its assertion. Pass → control flows on. Fail → it blocks, loops back, or branches to a repair node. <span class="mono text-[12.5px]">Deploy</span> never sees unverified work.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">interactive · the chain in motion</span>
+      <h2 class="h2 mt-3">Run the chain. Watch the test gate it.</h2>
+      <p class="lead mt-4">Toggle whether <span class="mono text-[15px] text-ink-2">Create</span> produced passing output, then press Run. The gate either lets <span class="mono text-[15px] text-ink-2">Deploy</span> through, or loops back to repair — <span class="mono text-[15px] text-ink-2">Deploy</span> never sees unverified work.</p>
+    </div>
+
+    <div class="tn-stage mt-10 reveal" id="tnStage" style="transition-delay:.05s">
+      <div class="tn-bar">
+        <span class="eyebrow">execution chain</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="tnRunStatus"><span class="dot dot-idle"></span> idle</span>
+      </div>
+
+      <div class="tn-body">
+        <div class="tn-chain">
+          <svg class="tn-chain-edges" viewBox="0 0 300 420" preserveAspectRatio="none" aria-hidden="true">
+            <path class="edge" id="tnE1" d="M150,46 L150,86"/>
+            <path class="edge" id="tnE2" d="M150,132 L150,172"/>
+            <path class="edge" id="tnE3" d="M150,218 L150,258"/>
+            <path class="edge" id="tnE4" d="M150,304 L150,344"/>
+            <!-- loop-back arc: TEST → Create on fail -->
+            <path class="edge" id="tnLoop" d="M44,288 C8,288 8,166 44,166" style="opacity:0;"/>
+          </svg>
+
+          <div class="tn-chain-nodes">
+            <div class="node" id="tnN1"><span class="dot dot-idle" data-dot></span><span class="nlabel">Initialiser</span><span class="ml-auto mono text-[11px] text-ink-muted">trigger</span></div>
+            <div class="node" id="tnN2"><span class="dot dot-idle" data-dot></span><span class="nlabel">Plan</span><span class="ml-auto mono text-[11px] text-ink-muted">reads test #1</span></div>
+            <div class="node" id="tnN3"><span class="dot dot-idle" data-dot></span><span class="nlabel">Create</span><span class="ml-auto mono text-[11px] text-ink-muted" id="tnCreateMeta">draft</span></div>
+            <div class="node is-test" id="tnNT"><span class="dot dot-test" data-dot></span><span class="nlabel">TEST&nbsp;#1</span><span class="ml-auto tn-assert" id="tnAssert">exit_code == 0</span></div>
+            <div class="node" id="tnN5"><span class="dot dot-idle" data-dot></span><span class="nlabel">Deploy</span><span class="ml-auto mono text-[11px] text-ink-muted">gated</span></div>
+          </div>
+        </div>
+
+        <!-- controls -->
+        <div class="mt-8 flex flex-wrap items-center gap-3 justify-center">
+          <button class="tn-btn" id="tnToggle" type="button" aria-pressed="false">Create output: <span id="tnOutLabel" class="text-st-done">passing</span></button>
+          <button class="tn-btn tn-btn-accent" id="tnRun" type="button">▸ Run chain</button>
+          <span class="tn-verdict" id="tnVerdict" aria-live="polite"><span class="vdot"></span><span id="tnVerdictText">awaiting run</span></span>
+        </div>
+
+        <!-- log readout -->
+        <div class="tn-log" id="tnLog" role="status" aria-live="polite">
+          <div class="mut">// press Run chain — TEST #1 will assert before Deploy executes</div>
+        </div>
+      </div>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-8 text-[14px] reveal">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      Back to all features
+    </a>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">related features</span>
+      <h2 class="h2 mt-3">Nodes that pair with Test #1.</h2>
+    </div>
+
+    <div class="rel-grid mt-10 reveal" style="transition-delay:.05s">
+      <a href="./advanced-orchestration.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">control</span></div>
+        <h3 class="feat-title">Advanced Orchestration</h3>
+        <p class="feat-desc">Branch, retry, loop, gate, timeout — the control edges a failing test triggers.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./canvas-planning.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span><span class="feat-tag">planning</span></div>
+        <h3 class="feat-title">Canvas Planning</h3>
+        <p class="feat-desc">Lay out goals and phases on the graph — Test nodes assert the milestones.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./agentic-streaming.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">flagship</span></div>
+        <h3 class="feat-title">Agentic Streaming</h3>
+        <p class="feat-desc">Fan a task across 20 agents — gate each lane's output with its own test.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+          <li><a href="./advanced-orchestration.html" class="hover:text-ink-2 transition-colors">Orchestration</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ PAGE SCRIPTS: reveal IO + the Test-node demo ============ -->
+<script>
+(function(){
+  /* ---- IntersectionObserver reveal (reduced-motion safe) ---- */
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var reveals = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+  if(reduce || !('IntersectionObserver' in window)){
+    reveals.forEach(function(el){ el.classList.add('in'); });
+  } else {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold:0.12, rootMargin:'0px 0px -8% 0px' });
+    reveals.forEach(function(el){ io.observe(el); });
+  }
+
+  /* ---- The Test-node demo ---- */
+  var stage = document.getElementById('tnStage');
+  if(!stage) return;
+  var runBtn   = document.getElementById('tnRun');
+  var toggle   = document.getElementById('tnToggle');
+  var outLabel = document.getElementById('tnOutLabel');
+  var status   = document.getElementById('tnRunStatus');
+  var verdict  = document.getElementById('tnVerdict');
+  var vText    = document.getElementById('tnVerdictText');
+  var log      = document.getElementById('tnLog');
+  var loopPath = document.getElementById('tnLoop');
+  var createMeta = document.getElementById('tnCreateMeta');
+
+  var nodes = [
+    { el: document.getElementById('tnN1'), edge: null },
+    { el: document.getElementById('tnN2'), edge: document.getElementById('tnE1') },
+    { el: document.getElementById('tnN3'), edge: document.getElementById('tnE2') },
+    { el: document.getElementById('tnNT'), edge: document.getElementById('tnE3') }, // TEST #1
+    { el: document.getElementById('tnN5'), edge: document.getElementById('tnE4') }  // Deploy
+  ];
+
+  var passing = true;     // does Create produce passing output?
+  var running = false;
+  var timers = [];
+
+  function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
+  function later(fn, ms){ timers.push(setTimeout(fn, ms)); }
+  function setDot(node, cls){
+    var d = node.el.querySelector('[data-dot]');
+    d.className = 'dot ' + cls;
+  }
+  function logLine(html){
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+  function reset(){
+    clearTimers();
+    nodes.forEach(function(n){
+      n.el.classList.remove('is-running','is-pass','is-fail');
+      setDot(n, n.el.id==='tnNT' ? 'dot-test' : 'dot-idle');
+      if(n.edge){ n.edge.classList.remove('active'); }
+    });
+    nodes[3].el.classList.add('is-test');
+    loopPath.style.opacity = '0';
+    loopPath.classList.remove('active');
+    status.innerHTML = '<span class="dot dot-idle"></span> idle';
+    verdict.className = 'tn-verdict';
+    vText.textContent = 'awaiting run';
+    log.innerHTML = '';
+  }
+
+  function updateToggle(){
+    toggle.setAttribute('aria-pressed', String(!passing));
+    outLabel.textContent = passing ? 'passing' : 'broken';
+    outLabel.className = passing ? 'text-st-done' : 'text-st-error';
+    createMeta.textContent = passing ? 'draft' : 'draft · regressed';
+  }
+
+  toggle.addEventListener('click', function(){
+    if(running) return;
+    passing = !passing;
+    updateToggle();
+  });
+
+  function run(){
+    if(running) return;
+    running = true;
+    reset();
+    runBtn.disabled = true; runBtn.style.opacity = '0.55';
+    status.innerHTML = '<span class="dot dot-run pulse-run"></span> running';
+
+    var seq = [
+      { i:0, label:'Initialiser', note:'trigger fired' },
+      { i:1, label:'Plan',        note:'read TEST #1 brief → planning toward exit_code == 0' },
+      { i:2, label:'Create',      note: passing ? 'wrote build · exit_code 0' : 'wrote build · exit_code 1 (regressed)' }
+    ];
+
+    var t = 280;
+    seq.forEach(function(step){
+      later(function(){
+        var n = nodes[step.i];
+        if(n.edge) n.edge.classList.add('active');
+        n.el.classList.add('is-running');
+        setDot(n, 'dot-run pulse-run');
+        logLine('<span class="acc">▸</span> ' + step.label + ' <span class="mut">— ' + step.note + '</span>');
+      }, t);
+      later(function(){
+        var n = nodes[step.i];
+        n.el.classList.remove('is-running');
+        n.el.classList.add('is-pass');
+        setDot(n, 'dot-done');
+      }, t + 620);
+      t += 900;
+    });
+
+    // TEST #1 evaluates
+    later(function(){
+      var tn = nodes[3];
+      nodes[2].edge && null;
+      tn.edge.classList.add('active');
+      tn.el.classList.remove('is-test');
+      tn.el.classList.add('is-running');
+      setDot(tn, 'dot-run pulse-run');
+      logLine('<span class="acc">▸</span> TEST #1 <span class="mut">— assert exit_code == 0 on Create output…</span>');
+    }, t);
+
+    later(function(){
+      var tn = nodes[3];
+      tn.el.classList.remove('is-running');
+      if(passing){
+        tn.el.classList.add('is-pass');
+        setDot(tn, 'dot-done');
+        verdict.className = 'tn-verdict is-pass';
+        vText.textContent = 'pass';
+        logLine('<span class="ok">✓ PASS</span> <span class="mut">— assertion satisfied · gate open</span>');
+      } else {
+        tn.el.classList.add('is-fail');
+        setDot(tn, 'dot-error');
+        verdict.className = 'tn-verdict is-fail';
+        vText.textContent = 'fail · loop back';
+        logLine('<span class="bad">✗ FAIL</span> <span class="mut">— exit_code 1 ≠ 0 · gate closed</span>');
+      }
+    }, t + 700);
+
+    // resolve: pass → Deploy, fail → loop back to Create
+    later(function(){
+      if(passing){
+        var dep = nodes[4];
+        dep.edge.classList.add('active');
+        dep.el.classList.add('is-running');
+        setDot(dep, 'dot-run pulse-run');
+        logLine('<span class="acc">▸</span> Deploy <span class="mut">— receiving verified output…</span>');
+        later(function(){
+          dep.el.classList.remove('is-running');
+          dep.el.classList.add('is-pass');
+          setDot(dep, 'dot-done');
+          status.innerHTML = '<span class="dot dot-done"></span> done';
+          logLine('<span class="ok">✓ chain complete</span> <span class="mut">— Deploy only ran on verified work</span>');
+          finish();
+        }, 720);
+      } else {
+        // loop back arc lights; Create re-arms
+        loopPath.style.opacity = '1';
+        loopPath.classList.add('active');
+        var cr = nodes[2];
+        cr.el.classList.remove('is-pass');
+        cr.el.classList.add('is-fail');
+        setDot(cr, 'dot-paused');
+        status.innerHTML = '<span class="dot dot-paused"></span> gated · repairing';
+        logLine('<span class="acc">↺</span> loop back <span class="mut">— TEST #1 routed control to Create for repair</span>');
+        logLine('<span class="mut">// Deploy never ran — no unverified work shipped</span>');
+        finish();
+      }
+    }, t + 1500);
+  }
+
+  function finish(){
+    running = false;
+    runBtn.disabled = false; runBtn.style.opacity = '1';
+  }
+
+  runBtn.addEventListener('click', run);
+  updateToggle();
+})();
+</script>
+
+</body>
+</html>

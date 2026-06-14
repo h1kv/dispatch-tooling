@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Direct (non-API) Subscription Models</title>
+<meta name="description" content="Use the AI subscription you already pay for — Claude Pro/Max and friends — to drive the canvas instead of buying API credits. DISPATCH exposes the graph over MCP and a sub-authed CLI, so the subscription runtime executes your nodes. No API key required." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<style>
+  /* ===== Page-local: subscription-runtime demo ===== */
+
+  /* mode switch: API credits vs Subscription */
+  .sub-switch{display:inline-flex;border:1px solid #eaeaea;background:#fff;padding:3px;gap:3px;}
+  .sub-seg{font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:0;color:#737373;
+    padding:8px 14px;min-height:40px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+    background:transparent;transition:background .18s var(--ease-hover),color .18s var(--ease-hover);}
+  .sub-seg:hover{color:#171717;}
+  .sub-seg.on{background:#0a0a0a;color:#fff;}
+  .sub-seg .seg-dot{width:7px;height:7px;flex:none;border-radius:9999px !important;background:currentColor;opacity:.75;}
+
+  /* the wiring stage */
+  .sub-stage{background:#fff;border:1px solid #eaeaea;}
+  .sub-stage-bar{border-bottom:1px solid #eaeaea;background:#fafafa;}
+
+  /* runtime source card (the thing that drives the graph) */
+  .sub-runtime{position:relative;border:1px solid #eaeaea;background:#fff;padding:14px;
+    transition:border-color .3s,box-shadow .3s,background .3s;}
+  .sub-runtime.is-sub{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.07);}
+  .sub-runtime-head{display:flex;align-items:center;gap:9px;}
+  .sub-runtime-name{font-family:'Geist Mono',monospace;font-size:13px;color:#0a0a0a;letter-spacing:0;}
+  .sub-meta{font-family:'Geist Mono',monospace;font-size:11px;color:#737373;letter-spacing:0;}
+
+  /* auth chip: API-key vs sub-auth */
+  .sub-auth{display:inline-flex;align-items:center;gap:7px;border:1px solid #eaeaea;background:#fafafa;
+    font-family:'Geist Mono',monospace;font-size:11.5px;color:#595959;padding:6px 10px;
+    transition:all .3s var(--ease-out);}
+  .sub-auth .akey{width:6px;height:6px;flex:none;background:#737373;}
+  .sub-auth.is-key{color:#b06d05;border-color:#f59e0b55;background:rgba(245,158,11,0.06);}
+  .sub-auth.is-key .akey{background:#f59e0b;}
+  .sub-auth.is-sub{color:#15803d;border-color:#16a34a55;background:rgba(22,163,74,0.06);}
+  .sub-auth.is-sub .akey{background:#16a34a;}
+
+  /* the MCP / CLI transport bridge between runtime and canvas */
+  .sub-bridge{position:relative;}
+  .sub-bridge svg{display:block;}
+  .sub-bridge-line{fill:none;stroke:#d4d4d4;stroke-width:1.5;}
+  .is-flow .sub-bridge-line{stroke:#635bff;stroke-dasharray:6 6;animation:subMarch 1s linear infinite;}
+  @keyframes subMarch{to{stroke-dashoffset:-12;}}
+  .sub-bridge-label{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    border:1px solid #eaeaea;background:#fff;font-family:'Geist Mono',monospace;font-size:11px;
+    color:#737373;padding:4px 9px;white-space:nowrap;transition:all .3s var(--ease-out);}
+  .is-flow .sub-bridge-label{border-color:#635bff66;color:#4f48d6;}
+
+  /* node chain that the runtime executes */
+  .sub-node{position:relative;background:#fff;border:1px solid #eaeaea;padding:10px 12px;
+    display:flex;align-items:center;gap:8px;transition:border-color .3s,box-shadow .3s,opacity .3s;}
+  .sub-node.is-running{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+  .sub-node.is-done{border-color:#16a34a55;}
+  .sub-node .nlabel{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+
+  /* meter rail: credits draining vs subscription flat */
+  .sub-meter{height:6px;background:#f0f0f0;width:100%;overflow:hidden;}
+  .sub-meter > span{display:block;height:100%;background:#f59e0b;width:100%;transition:width .6s var(--ease-out);}
+  .sub-meter.flat > span{background:#16a34a;width:100% !important;}
+
+  /* run button */
+  .sub-run{min-height:40px;}
+  @keyframes subTick{0%{transform:scale(1);}40%{transform:scale(.97);}100%{transform:scale(1);}}
+  .sub-ticked{animation:subTick .3s var(--ease-out);}
+
+  /* CLI window */
+  .sub-cli{background:#fafafa;border:1px solid #eaeaea;}
+  .sub-cli-bar{border-bottom:1px solid #eaeaea;background:#fff;}
+  .sub-cli-body{font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.85;}
+  .sub-prompt{color:#635bff;}
+  .sub-dim{color:#a3a3a3;}
+  .sub-ok{color:#15803d;}
+  .sub-warn{color:#b06d05;}
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html#top" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Nav behavior (inline — feature pages don't load ../app.js): scroll-opacity + mega-menu + mobile sheet -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(hover: none)').matches;
+
+  /* Scroll state: opaque nav past ~8px (white/blur bg + hairline + shadow) */
+  var nav = document.getElementById('nav');
+  if (nav) {
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /* Desktop Features mega-menu (hover-intent on pointer devices, click everywhere) */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  if (wrap && btn && menu) {
+    var openTimer = null, closeTimer = null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded', 'true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded', 'false');
+      menu.setAttribute('hidden', '');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if (!isTouch) {
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer = setTimeout(open, 60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer = setTimeout(close, 140); });
+    }
+    document.addEventListener('click', function(e){ if (isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && isOpen()) { close(); btn.focus(); } });
+    menu.addEventListener('click', function(e){ if (e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle + Features accordion */
+  var toggle = document.getElementById('navToggle');
+  var sheet = document.getElementById('mobileMenu');
+  var openIcon = document.getElementById('navOpenIcon');
+  var closeIcon = document.getElementById('navCloseIcon');
+  if (toggle && sheet) {
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if (openIcon) openIcon.classList.toggle('hidden', o);
+      if (closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){ el.addEventListener('click', function(){ setOpen(false); }); });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && !sheet.classList.contains('hidden')) { setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if (window.innerWidth >= 768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    var accBtn = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if (accBtn && accPanel) {
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen"></div>
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <a href="../index.html#features" class="link-arrow reveal text-[13px] mb-7">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      Back to all features
+    </a>
+
+    <div class="max-w-3xl">
+      <span class="eyebrow reveal" style="transition-delay:.02s">models · subscription runtime</span>
+
+      <h1 class="h1 mt-5 reveal" style="transition-delay:.05s">Run on the subscription<br class="hidden sm:block"> you already pay for.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        You already pay for <span class="text-ink-2">Claude Pro or Max</span>. DISPATCH lets that subscription drive the canvas directly — over <span class="mono text-ink-2">MCP</span> and a sub&#8209;authed CLI — instead of metering every node against pay&#8209;as&#8209;you&#8209;go API credits. <span class="text-ink-2">No API key. No second bill.</span>
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span>
+        <span class="badge"><span class="mono">via MCP</span></span>
+        <span class="badge">Sub-authed CLI</span>
+        <span class="badge">No API key</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT IS — deep explanation ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-16">
+      <div class="reveal">
+        <span class="eyebrow">what it is</span>
+        <h2 class="h2 mt-3">Your subscription is the runtime.</h2>
+        <p class="lead mt-4">DISPATCH publishes the graph over <span class="mono text-ink-2">MCP</span>. Your subscription&#8209;authed CLI attaches as the client, executes each node under your existing <span class="text-ink-2">Claude Pro/Max</span> entitlement, and writes results back. The canvas never sees a key, because there isn't one.</p>
+        <p class="mt-4 text-[15px] leading-relaxed text-ink-body">Since it's just another transport, funding is per node. An <span class="mono text-ink-2">Investigate</span> node can run on your Max seat while <span class="mono text-ink-2">Create</span> hits a local model and <span class="mono text-ink-2">Evaluate</span> stays on a metered API — same graph, three sources, one Run.</p>
+      </div>
+
+      <!-- bento: the four pillars -->
+      <div class="bento-wrap reveal" style="transition-delay:.06s">
+        <div class="bento" style="grid-template-columns:repeat(2,1fr);">
+          <div class="cell"><span class="eyebrow">no key</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Zero API credits</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">The run is driven by your seat's entitlement, not a pay&#8209;per&#8209;token key you have to top up.</p></div>
+          <div class="cell"><span class="eyebrow">transport</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Canvas over MCP</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">Nodes, prompts, tools and context are published as an MCP surface the CLI can drive.</p></div>
+          <div class="cell"><span class="eyebrow">client</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Sub-authed CLI</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">You sign in once with the CLI you already use; DISPATCH hands it nodes to execute.</p></div>
+          <div class="cell"><span class="eyebrow">mixed</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Per-node funding</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">Subscription, local, or metered API — choose per node. One graph, mixed sources.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO — flip the funding source ============ -->
+<section class="border-b border-hair bg-[#fafafa] relative overflow-hidden">
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(99,91,255,0.05), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">interactive · funding source</span>
+      <h2 class="h2 mt-3">Flip the source. Press Run.</h2>
+      <p class="lead mt-4">Switch the canvas between a metered <span class="mono text-ink-2">API key</span> and your <span class="mono text-ink-2">Claude Max</span> subscription, then run the chain. Watch the meter: same nodes, different bill.</p>
+    </div>
+
+    <!-- mode switch -->
+    <div class="mt-8 flex flex-wrap items-center gap-4 reveal" style="transition-delay:.04s">
+      <div class="sub-switch" role="tablist" aria-label="Funding source">
+        <button class="sub-seg" id="segApi" role="tab" aria-selected="false">
+          <span class="seg-dot"></span> API credits
+        </button>
+        <button class="sub-seg on" id="segSub" role="tab" aria-selected="true">
+          <span class="seg-dot"></span> Claude Max subscription
+        </button>
+      </div>
+      <button class="btn btn-dark sub-run" id="subRunBtn">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><path d="M3 2l9 5-9 5z"/></svg>
+        <span id="subRunLabel">Run chain</span>
+      </button>
+    </div>
+
+    <!-- stage: runtime → bridge → node chain -->
+    <div class="sub-stage mt-7 reveal" id="subStage" style="transition-delay:.06s">
+      <div class="sub-stage-bar flex items-center justify-between px-4 sm:px-5 h-11">
+        <span class="eyebrow">canvas runtime</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="subStatus"><span class="dot dot-idle"></span> idle</span>
+      </div>
+
+      <div class="grid lg:grid-cols-[0.92fr_auto_1.08fr] gap-0 lg:gap-0">
+
+        <!-- LEFT: the runtime / funding source -->
+        <div class="p-5 sm:p-6 border-b lg:border-b-0 lg:border-r border-hair flex flex-col gap-4">
+          <span class="eyebrow">driving the graph</span>
+
+          <div class="sub-runtime is-sub" id="subRuntime">
+            <div class="sub-runtime-head">
+              <span class="dot dot-run pulse-run" id="subRuntimeDot"></span>
+              <span class="sub-runtime-name" id="subRuntimeName">claude (sub-authed CLI)</span>
+            </div>
+            <p class="mt-2 sub-meta" id="subRuntimeDesc">Connected over MCP · executes nodes on your Claude Max seat.</p>
+
+            <div class="mt-3 sub-auth is-sub" id="subAuth">
+              <span class="akey" aria-hidden="true"></span>
+              <span id="subAuthText">auth: subscription session · no key</span>
+            </div>
+          </div>
+
+          <!-- usage meter -->
+          <div>
+            <div class="flex items-center justify-between mono text-[11px] text-ink-muted">
+              <span id="subMeterCap">subscription · included</span>
+              <span id="subMeterVal" class="tnum">$0.00</span>
+            </div>
+            <div class="sub-meter flat mt-2" id="subMeter"><span style="width:100%"></span></div>
+          </div>
+
+          <p class="text-[12.5px] text-ink-body leading-relaxed" id="subNote">
+            The subscription runtime drives the run end&#8209;to&#8209;end. No metered credits are drawn.
+          </p>
+        </div>
+
+        <!-- MIDDLE: MCP / CLI transport bridge -->
+        <div class="hidden lg:flex items-center justify-center px-2 relative">
+          <div class="sub-bridge w-[120px] h-full" id="subBridge">
+            <svg viewBox="0 0 120 240" preserveAspectRatio="none" class="w-full h-full" aria-hidden="true">
+              <path class="sub-bridge-line" d="M4,120 H116"/>
+            </svg>
+            <span class="sub-bridge-label" id="subBridgeLabel">MCP</span>
+          </div>
+        </div>
+
+        <!-- RIGHT: the node chain it executes -->
+        <div class="p-5 sm:p-6 border-t lg:border-t-0 border-hair flex flex-col">
+          <span class="eyebrow">executing on canvas</span>
+          <div class="mt-3 grid gap-2.5" id="subNodes">
+            <div class="sub-node" data-node="0"><span class="dot dot-idle"></span><span class="nlabel">Initialiser</span><span class="ml-auto mono text-[11px] text-ink-muted">trigger</span></div>
+            <div class="sub-node" data-node="1"><span class="dot dot-idle"></span><span class="nlabel">Investigate</span><span class="ml-auto mono text-[11px] text-ink-muted">web_search</span></div>
+            <div class="sub-node" data-node="2"><span class="dot dot-idle"></span><span class="nlabel">Plan</span><span class="ml-auto mono text-[11px] text-ink-muted">reason</span></div>
+            <div class="sub-node" data-node="3"><span class="dot dot-idle"></span><span class="nlabel">Create</span><span class="ml-auto mono text-[11px] text-ink-muted">draft</span></div>
+            <div class="sub-node" data-node="4"><span class="dot dot-idle"></span><span class="nlabel">Review</span><span class="ml-auto mono text-[11px] text-ink-muted">gate</span></div>
+          </div>
+
+          <!-- live CLI trace -->
+          <div class="sub-cli mt-5">
+            <div class="sub-cli-bar flex items-center justify-between px-3 h-9">
+              <div class="flex items-center gap-2">
+                <span class="term-dot" aria-hidden="true"></span>
+                <span class="mono text-[11.5px] text-ink-2" id="subCliTitle">dispatch · subscription session</span>
+              </div>
+              <span class="mono text-[11px] text-ink-muted" id="subCliMode">sub-auth</span>
+            </div>
+            <div class="sub-cli-body px-3 py-2.5 min-h-[92px]" id="subCli" aria-live="polite"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — the handshake ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">Publish the canvas. Let the seat drive.</h2>
+      <p class="lead mt-4">No key vault, no proxy reselling tokens. Three steps, once per session.</p>
+    </div>
+
+    <div class="mt-10 grid md:grid-cols-3 gap-px bg-hair border border-hair reveal">
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] text-accent">01</span>
+        <h3 class="h3 mt-3">Expose over MCP</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">DISPATCH publishes the graph as an MCP server: each node's prompt, allowed tools (<span class="mono">web_search</span>, <span class="mono">read_file</span>, <span class="mono">write_file</span>) and the shared <span class="mono text-ink-2">Context</span> bus.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] text-accent">02</span>
+        <h3 class="h3 mt-3">Connect the sub-authed CLI</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">Your Claude CLI signs in once with its own subscription session and attaches as the MCP client. No API key is generated, stored, or passed to the canvas.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] text-accent">03</span>
+        <h3 class="h3 mt-3">The seat executes nodes</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">On Run, the canvas hands each node to the CLI, which executes it under your entitlement and writes the output back downstream — exactly like a metered node would.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="flex items-center gap-4 reveal">
+      <span class="eyebrow">related features</span>
+      <span class="feat-rule"></span>
+    </div>
+
+    <div class="feat-grid mt-8 reveal" style="transition-delay:.05s">
+      <a href="./model-hotswap.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+        <h3 class="feat-title">Model Hotswapping</h3>
+        <p class="feat-desc">Set provider + model per node and swap live, mid-run.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./mcp-integrations.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span><span class="feat-tag">MCP</span></div>
+        <h3 class="feat-title">MCP + Integrations</h3>
+        <p class="feat-desc">Roblox, Linear, Notion, Vercel, Safentic, Netlify — and more.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./local-models.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">offline</span></div>
+        <h3 class="feat-title">Local Models</h3>
+        <p class="feat-desc">Ollama, llama.cpp, LM Studio — fully local, alongside the cloud.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-9">
+      Back to all features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Models</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="./model-hotswap.html" class="hover:text-ink-2 transition-colors">Model Hotswapping</a></li>
+          <li><a href="./local-models.html" class="hover:text-ink-2 transition-colors">Local Models</a></li>
+          <li><a href="./models-md-directive.html" class="hover:text-ink-2 transition-colors">Directive Model Control</a></li>
+          <li><a href="./subscription-models.html" class="hover:text-ink-2 transition-colors">Subscription Models</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ REVEAL OBSERVER (IntersectionObserver, reduced-motion safe) ============ -->
+<script>
+(function(){
+  var els=[].slice.call(document.querySelectorAll('.reveal'));
+  if(!els.length)return;
+  if(!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    els.forEach(function(el){el.classList.add('in');});return;
+  }
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  },{rootMargin:'0px 0px -8% 0px',threshold:0.05});
+  els.forEach(function(el){io.observe(el);});
+})();
+</script>
+
+<!-- ============ SUBSCRIPTION-RUNTIME DEMO ============ -->
+<script>
+(function(){
+  var stage=document.getElementById('subStage');
+  if(!stage)return;
+
+  var segApi=document.getElementById('segApi');
+  var segSub=document.getElementById('segSub');
+  var runBtn=document.getElementById('subRunBtn');
+  var runLabel=document.getElementById('subRunLabel');
+  var statusEl=document.getElementById('subStatus');
+
+  var runtime=document.getElementById('subRuntime');
+  var rtDot=document.getElementById('subRuntimeDot');
+  var rtName=document.getElementById('subRuntimeName');
+  var rtDesc=document.getElementById('subRuntimeDesc');
+  var auth=document.getElementById('subAuth');
+  var authText=document.getElementById('subAuthText');
+
+  var meter=document.getElementById('subMeter');
+  var meterBar=meter.querySelector('span');
+  var meterCap=document.getElementById('subMeterCap');
+  var meterVal=document.getElementById('subMeterVal');
+  var note=document.getElementById('subNote');
+
+  var bridge=document.getElementById('subBridge');
+  var bridgeLabel=document.getElementById('subBridgeLabel');
+
+  var nodes=[].slice.call(document.querySelectorAll('#subNodes .sub-node'));
+  var cli=document.getElementById('subCli');
+  var cliTitle=document.getElementById('subCliTitle');
+  var cliMode=document.getElementById('subCliMode');
+
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // mode config: 'sub' = subscription, 'api' = metered key
+  var CFG={
+    sub:{
+      name:'claude (sub-authed CLI)',
+      desc:'Connected over MCP · executes nodes on your Claude Max seat.',
+      authText:'auth: subscription session · no key',
+      authCls:'is-sub',
+      bridge:'MCP',
+      cliTitle:'dispatch · subscription session',
+      cliMode:'sub-auth',
+      meterCap:'subscription · included',
+      flat:true,
+      note:'The subscription runtime drives the run end‑to‑end. No metered credits are drawn.'
+    },
+    api:{
+      name:'api runtime (metered key)',
+      desc:'Each node bills tokens against a pay‑as‑you‑go API key.',
+      authText:'auth: API key sk-•••• · metered',
+      authCls:'is-key',
+      bridge:'HTTPS · key',
+      cliTitle:'dispatch · api session',
+      cliMode:'api-key',
+      meterCap:'metered · per token',
+      flat:false,
+      note:'Every node spends credits from the key. Costs scale with tokens used.'
+    }
+  };
+
+  var mode='sub';
+  var running=false;
+  var timers=[];
+  function clearTimers(){ timers.forEach(clearTimeout); timers=[]; }
+
+  function applyMode(m){
+    mode=m;
+    var c=CFG[m];
+    segSub.classList.toggle('on',m==='sub');
+    segApi.classList.toggle('on',m==='api');
+    segSub.setAttribute('aria-selected',String(m==='sub'));
+    segApi.setAttribute('aria-selected',String(m==='api'));
+
+    runtime.classList.toggle('is-sub',m==='sub');
+    rtName.textContent=c.name;
+    rtDesc.textContent=c.desc;
+    authText.textContent=c.authText;
+    auth.classList.toggle('is-sub',m==='sub');
+    auth.classList.toggle('is-key',m==='api');
+
+    bridgeLabel.textContent=c.bridge;
+    cliTitle.textContent=c.cliTitle;
+    cliMode.textContent=c.cliMode;
+    meterCap.textContent=c.meterCap;
+    note.innerHTML=c.note;
+
+    meter.classList.toggle('flat',c.flat);
+    if(c.flat){ meterBar.style.width='100%'; meterVal.textContent='$0.00'; }
+    else { meterBar.style.width='100%'; meterVal.textContent='$0.00'; }
+
+    resetRun();
+  }
+
+  function resetRun(){
+    clearTimers();
+    running=false;
+    runBtn.disabled=false;
+    runLabel.textContent='Run chain';
+    statusEl.innerHTML='<span class="dot dot-idle"></span> idle';
+    stage.classList.remove('is-flow');
+    bridge.classList.remove('is-flow');
+    nodes.forEach(function(n){
+      n.classList.remove('is-running','is-done');
+      var d=n.querySelector('.dot');
+      d.className='dot dot-idle';
+    });
+    cli.innerHTML='<div class="sub-dim">› ready — press Run</div>';
+    var c=CFG[mode];
+    meter.classList.toggle('flat',c.flat);
+    meterBar.style.width='100%';
+    meterVal.textContent='$0.00';
+  }
+
+  function line(html){
+    var div=document.createElement('div');
+    div.innerHTML=html;
+    cli.appendChild(div);
+    cli.scrollTop=cli.scrollHeight;
+  }
+
+  function run(){
+    if(running)return;
+    running=true;
+    runBtn.disabled=true;
+    runLabel.textContent='Running…';
+    runBtn.classList.remove('sub-ticked'); void runBtn.offsetWidth; runBtn.classList.add('sub-ticked');
+    cli.innerHTML='';
+    stage.classList.add('is-flow');
+    bridge.classList.add('is-flow');
+    statusEl.innerHTML='<span class="dot dot-run pulse-run"></span> running';
+
+    var c=CFG[mode];
+    var step= reduce ? 0 : 520;
+    var t=0;
+
+    if(mode==='sub'){
+      timers.push(setTimeout(function(){ line('<span class="sub-prompt">›</span> dispatch run --runtime claude --via mcp'); },t)); t+=step;
+      timers.push(setTimeout(function(){ line('<span class="sub-dim">  attaching sub-authed CLI · subscription session ok</span>'); },t)); t+=step;
+    } else {
+      timers.push(setTimeout(function(){ line('<span class="sub-prompt">›</span> dispatch run --runtime api --key sk-••••'); },t)); t+=step;
+      timers.push(setTimeout(function(){ line('<span class="sub-dim">  opening metered connection · billing per token</span>'); },t)); t+=step;
+    }
+
+    var cost=0;
+    var perNodeCost=[0,0.04,0.02,0.11,0.01];
+
+    nodes.forEach(function(n,i){
+      timers.push(setTimeout(function(){
+        // set running
+        nodes.forEach(function(m,j){ if(j<i){ m.classList.remove('is-running'); m.classList.add('is-done'); m.querySelector('.dot').className='dot dot-done'; } });
+        n.classList.add('is-running');
+        n.querySelector('.dot').className='dot dot-run pulse-run';
+        var label=n.querySelector('.nlabel').textContent;
+        if(mode==='sub'){
+          line('<span class="sub-ok">✓</span> '+label+' <span class="sub-dim">· executed on subscription seat</span>');
+        } else {
+          cost+=perNodeCost[i];
+          meterVal.textContent='$'+cost.toFixed(2);
+          meterBar.style.width=(100-(cost/0.20)*100)+'%';
+          line('<span class="sub-warn">$</span> '+label+' <span class="sub-dim">· +$'+perNodeCost[i].toFixed(2)+' credits</span>');
+        }
+      },t)); t+=step;
+    });
+
+    // finish
+    timers.push(setTimeout(function(){
+      nodes.forEach(function(n){ n.classList.remove('is-running'); n.classList.add('is-done'); n.querySelector('.dot').className='dot dot-done'; });
+      stage.classList.remove('is-flow');
+      bridge.classList.remove('is-flow');
+      statusEl.innerHTML='<span class="dot dot-done"></span> done';
+      if(mode==='sub'){
+        line('<span class="sub-ok">✓</span> run complete <span class="sub-dim">· $0.00 metered · 0 credits drawn</span>');
+        meterVal.textContent='$0.00';
+      } else {
+        line('<span class="sub-warn">$</span> run complete <span class="sub-dim">· $'+cost.toFixed(2)+' charged to key</span>');
+      }
+      running=false;
+      runBtn.disabled=false;
+      runLabel.textContent='Run again';
+    },t));
+  }
+
+  segSub.addEventListener('click',function(){ if(mode!=='sub') applyMode('sub'); });
+  segApi.addEventListener('click',function(){ if(mode!=='api') applyMode('api'); });
+  runBtn.addEventListener('click',run);
+
+  // gate first paint until in view (IO), reduced-motion safe
+  applyMode('sub');
+})();
+</script>
+
+</body>
+</html>

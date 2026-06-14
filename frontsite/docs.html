@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Docs</title>
+<meta name="description" content="Documentation for DISPATCH.AI — the open-source visual canvas for building AI agent workflows. Quickstart, node reference, running chains, CLI, features, self-hosting, and providers." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="./styles.css" />
+
+<!-- ===== DOCS-ONLY styles (square, on-brand) — FULL-PAGE DOCS APP ===== -->
+<style>
+/* ====================================================================
+   FULL-PAGE DOCS APP SHELL
+   [ fixed top bar (56px) ]
+   [ fixed sidebar (260px) | content (fluid) | TOC (240px) ]
+   Layout fills the viewport edge-to-edge under the top bar. The fixed
+   sidebar + TOC are reserved via margin/padding on .docs-body so nothing
+   sits under them.
+   ==================================================================== */
+:root{ --topbar-h:56px; --side-w:260px; --toc-w:240px; }
+
+/* body shell that reserves space for the fixed columns */
+.docs-body{padding-top:var(--topbar-h);}
+.docs-canvas{display:block;}
+.docs-content-wrap{margin-left:var(--side-w);min-width:0;}
+@media (min-width:1180px){ .docs-content-wrap{margin-right:var(--toc-w);} }
+@media (max-width:1000px){ .docs-content-wrap{margin-left:0;} }
+
+/* ===== SIDEBAR (fixed, full-height, flush left) ===== */
+.docs-side{position:fixed;left:0;top:var(--topbar-h);bottom:0;width:var(--side-w);z-index:40;
+  background:#fff;border-right:1px solid #eaeaea;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:24px 18px 60px;}
+@media (max-width:1000px){ .docs-side{display:none;} }
+.side-group{padding:13px 0;}
+.side-group + .side-group{border-top:1px solid #eaeaea;}
+.side-head{font-family:'Geist Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;
+  text-transform:uppercase;color:#737373;margin-bottom:9px;display:flex;align-items:center;gap:8px;}
+.side-head .sdot-sq{width:5px;height:5px;background:#635bff;display:inline-block;flex:none;}
+.side-link{display:flex;align-items:center;gap:8px;min-height:30px;padding:4px 10px;margin:0 0 1px;
+  font-size:13.5px;color:#595959;border-left:2px solid transparent;transition:color .14s,background .14s,border-color .14s;}
+.side-link:hover{color:#0a0a0a;background:#f7f7f8;}
+.side-link.is-active{color:#0a0a0a;border-left-color:#635bff;background:#f6f6fb;font-weight:500;}
+.side-link .ldot{width:5px;height:5px;background:#cfcfcf;display:inline-block;flex:none;transition:background .14s;}
+.side-link.is-active .ldot{background:#635bff;}
+.side-empty{font-family:'Geist Mono',monospace;font-size:11.5px;color:#a3a3a3;padding:6px 10px;}
+
+/* ===== TOC (right, fixed) ===== */
+.docs-toc{position:fixed;right:0;top:var(--topbar-h);bottom:0;width:var(--toc-w);z-index:30;
+  background:#fff;border-left:1px solid #eaeaea;overflow-y:auto;
+  padding:30px 22px 60px;}
+@media (max-width:1179px){ .docs-toc{display:none;} }
+.toc-head{font-family:'Geist Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;
+  text-transform:uppercase;color:#737373;margin-bottom:12px;}
+.toc-link{display:block;font-size:12.5px;line-height:1.4;color:#737373;padding:5px 0 5px 12px;
+  border-left:2px solid #eaeaea;transition:color .14s,border-color .14s;}
+.toc-link:hover{color:#171717;}
+.toc-link.is-active{color:#0a0a0a;border-left-color:#635bff;font-weight:500;}
+
+/* ===== CONTENT (fills remaining width) ===== */
+.docs-main{min-width:0;padding:40px 48px 100px;}
+@media (max-width:1000px){ .docs-main{padding:32px 28px 80px;} }
+@media (max-width:560px){ .docs-main{padding:26px 20px 70px;} }
+.docs-prose{max-width:760px;margin:0 auto;}
+.doc-sec{padding-top:18px;margin-top:30px;scroll-margin-top:72px;}
+.doc-sec:first-of-type{margin-top:0;}
+.doc-sec h2{font-size:clamp(24px,3vw,32px);font-weight:600;letter-spacing:-0.03em;line-height:1.12;color:#0a0a0a;scroll-margin-top:76px;}
+.doc-sec h3{font-size:17px;font-weight:600;letter-spacing:-0.02em;color:#0a0a0a;margin-top:30px;scroll-margin-top:76px;}
+.doc-sec p{font-size:15px;line-height:1.66;color:#595959;margin-top:14px;}
+.doc-sec p a, .doc-prose-link{color:#171717;border-bottom:1px solid #cdd0f7;transition:color .14s,border-color .14s;}
+.doc-sec p a:hover, .doc-prose-link:hover{color:#635bff;border-color:#635bff;}
+.doc-sec ul{margin-top:14px;display:flex;flex-direction:column;gap:8px;}
+.doc-sec li{font-size:15px;line-height:1.6;color:#595959;padding-left:18px;position:relative;}
+.doc-sec li::before{content:'';position:absolute;left:0;top:10px;width:6px;height:6px;background:#cdd0f7;}
+.doc-sec code, .code-inline{font-family:'Geist Mono',monospace;font-size:12.5px;color:#171717;
+  background:#f3f3f5;border:1px solid #eaeaea;padding:1px 5px;}
+.doc-sec p code{color:#4f48d6;}
+.doc-eyebrow{display:flex;align-items:center;gap:10px;}
+
+/* hairline rule */
+.doc-rule{height:1px;background:#eaeaea;margin:38px 0 0;}
+
+/* ===== NOTICES ===== */
+.notice{position:relative;border:1px solid #eaeaea;background:#fff;padding:16px 18px 16px 18px;
+  display:flex;gap:13px;align-items:flex-start;margin-top:22px;}
+.notice::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;}
+.notice-warn::before{background:#f59e0b;}
+.notice-info::before{background:#635bff;}
+.notice-glyph{flex:none;width:24px;height:24px;display:grid;place-items:center;border:1px solid #eaeaea;background:#fafafa;margin-top:1px;}
+.notice-warn .notice-glyph{color:#b06d05;border-color:#f59e0b55;background:rgba(245,158,11,0.06);}
+.notice-info .notice-glyph{color:#4f48d6;border-color:#635bff44;background:rgba(99,91,255,0.05);}
+.notice-body{min-width:0;}
+.notice-kicker{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;
+  margin-bottom:4px;display:block;}
+.notice-warn .notice-kicker{color:#b06d05;}
+.notice-info .notice-kicker{color:#4f48d6;}
+.notice-text{font-size:14px;line-height:1.55;color:#262626;}
+
+/* ===== SQUARE CODE BLOCK (light terminal) ===== */
+.code-win{border:1px solid #eaeaea;background:#fafafa;margin-top:18px;overflow:hidden;}
+.code-bar{display:flex;align-items:center;gap:9px;border-bottom:1px solid #eaeaea;background:#fff;padding:0 12px;height:34px;}
+.code-bar .term-dot{width:8px;height:8px;border:1px solid #d6d6d6;background:#fff;}
+.code-bar .code-name{margin-left:6px;font-family:'Geist Mono',monospace;font-size:11px;color:#737373;letter-spacing:0.02em;}
+.code-body{padding:14px 16px;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.85;color:#171717;overflow-x:auto;}
+.code-body .c-prompt{color:#b3b3b3;user-select:none;}
+.code-body .c-cmd{color:#171717;}
+.code-body .c-flag{color:#635bff;}
+.code-body .c-com{color:#a3a3a3;}
+.code-body .c-out{color:#737373;}
+.code-body .c-ok{color:#16a34a;}
+.code-body pre{margin:0;white-space:pre;}
+
+/* ===== HAIRLINE TABLE ===== */
+.doc-table-wrap{margin-top:20px;border:1px solid #eaeaea;overflow-x:auto;}
+.doc-table{width:100%;border-collapse:collapse;min-width:560px;}
+.doc-table th{font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;
+  color:#737373;text-align:left;font-weight:500;padding:11px 14px;background:#fafafa;border-bottom:1px solid #eaeaea;}
+.doc-table td{font-size:13px;color:#595959;padding:11px 14px;border-bottom:1px solid #eaeaea;vertical-align:top;line-height:1.5;}
+.doc-table tr:last-child td{border-bottom:0;}
+.doc-table td:first-child{white-space:nowrap;}
+.doc-table .t-node{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+.doc-table .t-cmd{font-family:'Geist Mono',monospace;font-size:12px;color:#4f48d6;letter-spacing:0;}
+.doc-table tr:hover td{background:#fcfcfd;}
+
+/* ===== NODE REFERENCE GRID ===== */
+.node-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;margin-top:20px;}
+@media (max-width:760px){ .node-grid{grid-template-columns:repeat(2,1fr);} }
+@media (max-width:440px){ .node-grid{grid-template-columns:1fr;} }
+.node-cell{background:#fff;padding:14px 15px;display:flex;flex-direction:column;gap:6px;min-width:0;
+  transition:background .14s;}
+.node-cell:hover{background:#fcfcfd;}
+.node-cell-head{display:flex;align-items:center;gap:8px;}
+.node-cell-head .nname{font-family:'Geist Mono',monospace;font-size:12.5px;color:#171717;letter-spacing:0;}
+.node-cell-desc{font-size:12px;line-height:1.5;color:#737373;}
+
+/* ===== FEATURE INDEX (docs) ===== */
+.docs-feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;margin-top:20px;}
+@media (max-width:560px){ .docs-feat-grid{grid-template-columns:1fr;} }
+.docs-feat{position:relative;display:flex;align-items:center;gap:10px;background:#fff;padding:13px 15px;
+  text-decoration:none;transition:background .14s;}
+.docs-feat:hover{background:#fcfcfd;}
+.docs-feat::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#635bff;
+  transform:scaleY(0);transform-origin:top;transition:transform .18s var(--ease-out);}
+.docs-feat:hover::before{transform:scaleY(1);}
+.docs-feat .df-name{font-size:13.5px;font-weight:500;color:#171717;letter-spacing:-0.01em;}
+.docs-feat .df-arrow{margin-left:auto;color:#635bff;transition:transform .15s var(--ease-hover);}
+.docs-feat:hover .df-arrow{transform:translateX(3px);}
+
+/* ===== DOCS TOP BAR (slim, fixed, full-width) ===== */
+.docs-nav{position:fixed;top:0;inset-inline:0;z-index:60;height:var(--topbar-h);
+  background:#fff;border-bottom:1px solid #eaeaea;}
+.docs-nav-inner{height:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:0 20px;}
+.docs-search{display:flex;align-items:center;gap:8px;border:1px solid #eaeaea;background:#fafafa;height:36px;padding:0 11px;
+  width:300px;max-width:38vw;transition:border-color .15s,background .15s,box-shadow .15s;}
+.docs-search:focus-within{border-color:#635bff;background:#fff;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+.docs-search input{border:0;outline:0;background:transparent;font-size:13px;color:#171717;width:100%;font-family:'Geist',sans-serif;}
+.docs-search input::placeholder{color:#a3a3a3;}
+.docs-search .ds-kbd{font-family:'Geist Mono',monospace;font-size:10px;color:#a3a3a3;border:1px solid #eaeaea;background:#fff;padding:1px 5px;}
+.docs-back{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:#595959;height:34px;padding:0 10px;
+  border:1px solid transparent;transition:color .15s,background .15s;}
+.docs-back:hover{color:#0a0a0a;background:#f5f5f5;}
+.docs-gh{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#595959;height:34px;padding:0 11px;
+  border:1px solid #eaeaea;background:#fff;transition:color .15s,border-color .15s,background .15s;}
+.docs-gh:hover{color:#0a0a0a;border-color:#d6d6d6;background:#fafafa;}
+/* hamburger (mobile only) */
+.docs-menu-btn{display:none;align-items:center;justify-content:center;width:36px;height:36px;
+  border:1px solid #eaeaea;background:#fff;color:#171717;flex:none;transition:border-color .15s,background .15s;}
+.docs-menu-btn:hover{border-color:#d6d6d6;background:#fafafa;}
+@media (max-width:1000px){ .docs-menu-btn{display:inline-flex;} }
+
+/* ===== MOBILE SIDEBAR DRAWER ===== */
+.docs-drawer{position:fixed;inset:var(--topbar-h) 0 0;z-index:55;display:none;}
+.docs-drawer.is-open{display:block;}
+.docs-drawer-scrim{position:absolute;inset:0;background:rgba(10,10,10,0.32);}
+.docs-drawer-panel{position:absolute;left:0;top:0;bottom:0;width:min(300px,84vw);background:#fff;
+  border-right:1px solid #eaeaea;overflow-y:auto;padding:18px 18px 60px;
+  box-shadow:0 18px 44px -16px rgba(10,10,10,0.28);}
+@media (min-width:1001px){ .docs-drawer{display:none !important;} }
+
+/* search: hidden state for filtered-out items/groups */
+.side-link.is-hidden{display:none;}
+.side-group.is-hidden{display:none;}
+
+/* in-view reveal (gated, RM-safe via styles.css net) */
+.js .doc-reveal{opacity:0;transform:translateY(12px);}
+.js .doc-reveal.in{opacity:1;transform:none;transition:opacity .5s var(--ease-out),transform .5s var(--ease-out);}
+
+@media (prefers-reduced-motion: reduce){
+  .js .doc-reveal{opacity:1;transform:none;}
+}
+
+/* keep code + tables from blowing out the grid track */
+.docs-main, .docs-prose, .code-win, .doc-table-wrap{min-width:0;}
+</style>
+</head>
+<body class="font-sans antialiased docs-body">
+
+<!-- ============ TOP BAR (slim, fixed, full-width) ============ -->
+<header id="docsNav" class="docs-nav">
+  <div class="docs-nav-inner">
+    <div class="flex items-center gap-3 min-w-0">
+      <button type="button" id="drawerToggle" class="docs-menu-btn" aria-expanded="false" aria-controls="docsDrawer" aria-label="Open navigation menu">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <a href="./index.html" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+        <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+          <span class="w-2 h-2 bg-ink"></span>
+          <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+        </span>
+        <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+      </a>
+      <span class="hidden sm:inline-block mono text-[12px] text-ink-muted border border-hair px-2 py-1 leading-none">docs</span>
+    </div>
+
+    <div class="flex items-center gap-2.5 min-w-0">
+      <label class="docs-search" for="docsSearch" aria-label="Search documentation">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#a3a3a3" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+        <input id="docsSearch" type="search" placeholder="Search docs…" autocomplete="off" spellcheck="false" />
+        <span class="ds-kbd hidden lg:inline-block">/</span>
+      </label>
+      <a href="./index.html" class="docs-back hidden md:inline-flex">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11 7H3M7 3L3 7l4 4"/></svg>
+        Back to site
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="docs-gh hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[12.5px]">View on GitHub</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="top" class="docs-canvas">
+
+  <!-- ============ FIXED SIDEBAR (full-height, flush left) ============ -->
+  <aside class="docs-side" id="docsSidebar" aria-label="Documentation sections">
+    <nav id="sideNav"></nav>
+  </aside>
+
+  <!-- ============ CONTENT (fills remaining width) ============ -->
+  <div class="docs-content-wrap">
+    <div class="docs-main">
+      <div class="docs-prose">
+
+        <!-- ===== GETTING STARTED ===== -->
+        <section id="introduction" class="doc-sec" data-toc="Introduction" data-group="Getting Started">
+          <div class="doc-eyebrow"><span class="eyebrow">getting started</span></div>
+          <h2 class="mt-3">What is DISPATCH.AI?</h2>
+          <p>DISPATCH.AI is an open-source, MIT-licensed visual canvas — an IDE for building AI agent workflows. Instead of prompting a chat window in a loop, you lay your work out as a graph: each step is a <strong class="text-ink-2 font-medium">node</strong>, each node runs a model with tools, and edges carry output (and control) from one node to the next.</p>
+          <p>You wire the work once and press <strong class="text-ink-2 font-medium">Run</strong>. The chain executes top-to-bottom, every node reports live status, and edges animate while data flows downstream. It runs fully on your own machine or self-hosted infrastructure — no telemetry, no cloud lock-in.</p>
+
+          <!-- WARNING NOTICE -->
+          <div class="notice notice-warn" role="note">
+            <span class="notice-glyph" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 1.5L15 14H1L8 1.5z"/><path d="M8 6.5v3.2" stroke-linecap="round"/><circle cx="8" cy="11.6" r="0.4" fill="currentColor" stroke="none"/></svg>
+            </span>
+            <div class="notice-body">
+              <span class="notice-kicker">heads up</span>
+              <p class="notice-text">Documentation will be moved shortly under markdown files in the main repository!</p>
+            </div>
+          </div>
+
+          <!-- INFO NOTICE -->
+          <div class="notice notice-info" role="note">
+            <span class="notice-glyph" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4" stroke-linecap="round"/><circle cx="8" cy="4.7" r="0.45" fill="currentColor" stroke="none"/></svg>
+            </span>
+            <div class="notice-body">
+              <span class="notice-kicker">note</span>
+              <p class="notice-text">This documentation will soon include rapid graph and RAG-based support for our internal tools, such as our copilot, to recall.</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <section id="quickstart" class="doc-sec" data-toc="Quickstart" data-group="Getting Started">
+          <h2>Quickstart</h2>
+          <p>Three moves get you from blank canvas to a running chain.</p>
+          <ul>
+            <li><strong class="text-ink-2 font-medium">Place nodes.</strong> Drag node types from the palette onto the infinite canvas — start with an Initialiser, then add Investigate, Plan, Create, Review.</li>
+            <li><strong class="text-ink-2 font-medium">Wire them top-to-bottom.</strong> Connect each node's output handle to the next node's input. Edges define order and carry data downstream.</li>
+            <li><strong class="text-ink-2 font-medium">Press Run.</strong> The chain executes in order. Watch status dots flip <span class="mono text-[12px]">idle → running → done</span> and edges march while output flows.</li>
+          </ul>
+
+          <div class="code-win">
+            <div class="code-bar">
+              <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+              <span class="code-name">dispatch — quickstart</span>
+            </div>
+            <div class="code-body"><pre><span class="c-prompt">$</span> <span class="c-cmd">dispatch new</span> my-first-chain      <span class="c-com"># scaffold a canvas</span>
+<span class="c-prompt">$</span> <span class="c-cmd">cd</span> my-first-chain
+<span class="c-prompt">$</span> <span class="c-cmd">dispatch open</span>                   <span class="c-com"># open the visual canvas / IDE</span>
+
+<span class="c-com"># place nodes → wire top-to-bottom → then:</span>
+<span class="c-prompt">›</span> <span class="c-cmd">run</span>
+<span class="c-out">Initialiser  </span><span class="c-ok">done</span>
+<span class="c-out">Investigate  </span><span class="c-ok">done</span>  <span class="c-out">web_search → 3 sources</span>
+<span class="c-out">Plan         </span><span class="c-ok">done</span>
+<span class="c-out">Review       </span><span class="c-flag">paused</span> <span class="c-out">→ awaiting approval</span></pre></div>
+          </div>
+        </section>
+
+        <section id="install" class="doc-sec" data-toc="Install" data-group="Getting Started">
+          <h2>Install</h2>
+          <p>DISPATCH is local-first. Clone the repository and run it on your own machine — nothing leaves your network. See <a href="#self-hosting" class="doc-prose-link">Self-hosting</a> for production and air-gapped setups.</p>
+          <div class="code-win">
+            <div class="code-bar">
+              <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+              <span class="code-name">install</span>
+            </div>
+            <div class="code-body"><pre><span class="c-prompt">$</span> <span class="c-cmd">git clone</span> https://github.com/h1kv/dispatch-tooling
+<span class="c-prompt">$</span> <span class="c-cmd">cd</span> dispatch-tooling
+<span class="c-prompt">$</span> <span class="c-cmd">npm install</span>
+<span class="c-prompt">$</span> <span class="c-cmd">npm run dev</span>                      <span class="c-com"># canvas at http://localhost:3000</span></pre></div>
+          </div>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <!-- ===== THE CANVAS ===== -->
+        <section id="the-canvas" class="doc-sec" data-toc="The Canvas" data-group="The Canvas">
+          <div class="doc-eyebrow"><span class="eyebrow">the canvas</span></div>
+          <h2 class="mt-3">The Canvas</h2>
+          <p>The canvas is an infinite workspace where every capability is a node, a surface, or a switch on one graph. Drag to pan, scroll to zoom, and drop node types from the palette. The graph <em>is</em> the program — it is also a file, so it can be committed, diffed, and reviewed like code.</p>
+          <h3>Nodes &amp; edges</h3>
+          <p>A node holds an instruction, a provider + model, and the tools it may call. An edge connects one node's output to the next node's input — defining both execution order and the data handed downstream. There is no hidden runtime: what you see on the canvas is exactly what runs.</p>
+          <h3>Status &amp; live run</h3>
+          <p>Every node reports state as the chain runs.</p>
+          <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2.5 text-[13px]">
+            <span class="inline-flex items-center gap-2 mono"><span class="dot dot-idle"></span> idle</span>
+            <span class="inline-flex items-center gap-2 mono"><span class="dot dot-run pulse-run"></span> running</span>
+            <span class="inline-flex items-center gap-2 mono"><span class="dot dot-done"></span> done</span>
+            <span class="inline-flex items-center gap-2 mono"><span class="dot dot-paused"></span> paused</span>
+            <span class="inline-flex items-center gap-2 mono"><span class="dot dot-error"></span> error</span>
+          </div>
+        </section>
+
+        <section id="context-memory" class="doc-sec" data-toc="Context & Memory" data-group="The Canvas">
+          <h2>Context &amp; Memory</h2>
+          <p>Context is shared state across the graph. A node can <span class="mono text-[12px]">write</span> a value (for example <code>run.findings</code> or <code>run.plan</code>) and any downstream node can <span class="mono text-[12px]">read</span> it — no copy/paste, no manual threading. The <strong class="text-ink-2 font-medium">Context</strong> node makes this explicit on the canvas.</p>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Key</th><th>Written by</th><th>Read by</th><th>Access</th></tr></thead>
+              <tbody>
+                <tr><td><span class="t-node">run.findings</span></td><td>Investigate</td><td>Plan, Create</td><td>write · read</td></tr>
+                <tr><td><span class="t-node">run.plan</span></td><td>Plan</td><td>Create, Review</td><td>write · read</td></tr>
+                <tr><td><span class="t-node">run.draft</span></td><td>Create</td><td>Review, Doc</td><td>write · read</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <!-- ===== NODE REFERENCE ===== -->
+        <section id="node-reference" class="doc-sec" data-toc="Node Reference" data-group="Node Reference">
+          <div class="doc-eyebrow"><span class="eyebrow">node reference</span></div>
+          <h2 class="mt-3">Node Reference</h2>
+          <p>Every node type DISPATCH ships with. Mix and match them on the canvas — each runs a model with tools and hands its output downstream.</p>
+
+          <div class="node-grid">
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-idle"></span><span class="nname">Initialiser</span></div><p class="node-cell-desc">Entry trigger. Seeds the run with the initial task and context.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Investigate</span></div><p class="node-cell-desc">Researches with live tools (web_search, fetch_url) and gathers sources.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Plan</span></div><p class="node-cell-desc">Turns findings into an ordered plan of phases and steps.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Design</span></div><p class="node-cell-desc">Produces structure, layout, or system design from the plan.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Create</span></div><p class="node-cell-desc">Generates the artifact — code, copy, or documents — from upstream context.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-paused"></span><span class="nname">Evaluate</span></div><p class="node-cell-desc">Scores or judges an output against criteria; can branch on the result.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Doc</span></div><p class="node-cell-desc">Writes documentation or summaries from the produced artifact.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Apply</span></div><p class="node-cell-desc">Commits changes — writes files, applies a patch, or executes the result.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-idle"></span><span class="nname">Context</span></div><p class="node-cell-desc">Shared memory read/write across the graph (run.findings, run.plan…).</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-paused"></span><span class="nname">Review</span></div><p class="node-cell-desc">Human-in-the-loop checkpoint. Pauses for Approve / Reject before continuing.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Parallel</span></div><p class="node-cell-desc">Fans one input out to many branches that run concurrently.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Merge</span></div><p class="node-cell-desc">Fan-in: joins multiple branches back into a single downstream output.</p></div>
+            <div class="node-cell"><div class="node-cell-head"><span class="dot dot-run"></span><span class="nname">Deploy</span></div><p class="node-cell-desc">Ships the canvas to a target — e.g. a GPU pod serving a 70B-class model.</p></div>
+          </div>
+
+          <h3>Live tools</h3>
+          <p>Any node can call DISPATCH's built-in tools while it runs:</p>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+              <tbody>
+                <tr><td><span class="t-cmd">web_search</span></td><td>Search the web and return ranked sources.</td></tr>
+                <tr><td><span class="t-cmd">fetch_url</span></td><td>Fetch and read the contents of a URL.</td></tr>
+                <tr><td><span class="t-cmd">read_file</span></td><td>Read a file from the working directory.</td></tr>
+                <tr><td><span class="t-cmd">write_file</span></td><td>Write or overwrite a file on disk.</td></tr>
+                <tr><td><span class="t-cmd">list_files</span></td><td>List files and directories in a path.</td></tr>
+                <tr><td><span class="t-cmd">shell_exec</span></td><td>Execute a shell command and capture its output.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <!-- ===== RUNNING CHAINS ===== -->
+        <section id="running-chains" class="doc-sec" data-toc="Running Chains" data-group="Running Chains">
+          <div class="doc-eyebrow"><span class="eyebrow">running chains</span></div>
+          <h2 class="mt-3">Running Chains</h2>
+          <p>A chain runs top-to-bottom in dependency order. Each node executes once its upstream inputs are satisfied; independent branches run in parallel. Press <strong class="text-ink-2 font-medium">Run</strong> on the canvas or invoke <code>run</code> from the inbuilt CLI.</p>
+          <h3>Human-in-the-loop</h3>
+          <p>Drop a <strong class="text-ink-2 font-medium">Review</strong> node anywhere to gate the chain. When the run reaches it, the node pauses and surfaces Approve / Reject controls — nothing downstream proceeds until you sign off.</p>
+          <div class="mt-5 review-node" style="max-width:300px;">
+            <div class="review-head"><span class="dot dot-paused"></span><span class="nlabel">Review</span><span class="ml-auto mono text-[11px] text-ink-muted">human checkpoint</span></div>
+            <div class="review-actions">
+              <button class="review-btn review-approve" type="button">Approve</button>
+              <button class="review-btn review-reject" type="button">Reject</button>
+            </div>
+          </div>
+          <h3>Parallel &amp; merge</h3>
+          <p>Use a <strong class="text-ink-2 font-medium">Parallel</strong> node to fan one task out across many branches (or many agents), then a <strong class="text-ink-2 font-medium">Merge</strong> node to converge them back into one synthesized result. See <a href="features/agentic-streaming.html" class="doc-prose-link">Agentic Streaming</a> for deploying 20 agents on a single task.</p>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <!-- ===== CLI ===== -->
+        <section id="cli" class="doc-sec" data-toc="CLI" data-group="CLI">
+          <div class="doc-eyebrow"><span class="eyebrow">cli</span></div>
+          <h2 class="mt-3">Inbuilt CLI</h2>
+          <p>A real terminal lives inside the canvas. Drive runs, hotswap models, stream logs, and install skills without leaving DISPATCH. See the <a href="features/terminal-cli.html" class="doc-prose-link">Terminal / CLI</a> feature page for the full surface.</p>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Command</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="t-cmd">run</span></td><td>Execute the whole chain from the top.</td></tr>
+                <tr><td><span class="t-cmd">stop</span></td><td>Halt the active run immediately.</td></tr>
+                <tr><td><span class="t-cmd">retry &lt;node&gt;</span></td><td>Re-run a single node and everything downstream of it.</td></tr>
+                <tr><td><span class="t-cmd">deploy</span></td><td>Ship the canvas to a target (e.g. <span class="mono text-[11px]">--pod</span> for a GPU pod).</td></tr>
+                <tr><td><span class="t-cmd">stream &lt;n&gt;</span></td><td>Tail the live token stream of node <span class="mono text-[11px]">n</span>.</td></tr>
+                <tr><td><span class="t-cmd">model &lt;node&gt;</span></td><td>Hotswap the provider + model for a node, mid-run.</td></tr>
+                <tr><td><span class="t-cmd">voice</span></td><td>Toggle the agentic VoiceOrb to edit the graph by voice.</td></tr>
+                <tr><td><span class="t-cmd">install &lt;skill&gt;</span></td><td>Install a community skill; it becomes a droppable node.</td></tr>
+                <tr><td><span class="t-cmd">status</span></td><td>Show per-node state across the canvas.</td></tr>
+                <tr><td><span class="t-cmd">logs</span></td><td>Print run logs for the chain or a single node.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="code-win">
+            <div class="code-bar">
+              <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+              <span class="code-name">dispatch ›</span>
+            </div>
+            <div class="code-body"><pre><span class="c-prompt">›</span> <span class="c-cmd">run</span>
+<span class="c-out">chain started · 5 nodes</span>
+<span class="c-prompt">›</span> <span class="c-cmd">model</span> Create <span class="c-flag">--provider</span> anthropic <span class="c-flag">--model</span> opus
+<span class="c-ok">✓</span> <span class="c-out">Create → anthropic · opus  (hot-swapped)</span>
+<span class="c-prompt">›</span> <span class="c-cmd">retry</span> Investigate
+<span class="c-out">re-running Investigate + downstream…</span></pre></div>
+          </div>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <!-- ===== FEATURES ===== -->
+        <section id="features" class="doc-sec" data-toc="Features" data-group="Features">
+          <div class="doc-eyebrow"><span class="eyebrow">features</span></div>
+          <h2 class="mt-3">Features index</h2>
+          <p>Every capability has a dedicated deep-dive page. Open any to go further.</p>
+          <div class="docs-feat-grid">
+            <a href="features/agentic-streaming.html" class="docs-feat"><span class="dot dot-run"></span><span class="df-name">Agentic Streaming</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/advanced-orchestration.html" class="docs-feat"><span class="dot dot-done"></span><span class="df-name">Advanced Orchestration</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/model-hotswap.html" class="docs-feat"><span class="dot dot-done"></span><span class="df-name">Model Hotswapping</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/local-models.html" class="docs-feat"><span class="dot dot-paused"></span><span class="df-name">Local Models</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/rag.html" class="docs-feat"><span class="dot dot-idle"></span><span class="df-name">Node-based RAG</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/voice-control.html" class="docs-feat"><span class="dot dot-done"></span><span class="df-name">Voice Control</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/terminal-cli.html" class="docs-feat"><span class="dot dot-done"></span><span class="df-name">Terminal / CLI</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/skills-as-nodes.html" class="docs-feat"><span class="dot dot-done"></span><span class="df-name">Skills-as-Nodes</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/mcp-integrations.html" class="docs-feat"><span class="dot dot-idle"></span><span class="df-name">MCP + Integrations</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/multiplayer-collab.html" class="docs-feat"><span class="dot dot-done"></span><span class="df-name">Multiplayer Collaboration</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/analytics.html" class="docs-feat"><span class="dot dot-idle"></span><span class="df-name">Analytics</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+            <a href="features/git-backed-canvas.html" class="docs-feat"><span class="dot dot-paused"></span><span class="df-name">Git-backed Canvas</span><svg class="df-arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+          </div>
+          <p class="mt-5"><a href="./index.html#features" class="doc-prose-link">Browse all 20 capabilities on the main site →</a></p>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <!-- ===== SELF-HOSTING ===== -->
+        <section id="self-hosting" class="doc-sec" data-toc="Self-hosting" data-group="Self-hosting">
+          <div class="doc-eyebrow"><span class="eyebrow">self-hosting</span></div>
+          <h2 class="mt-3">Self-hosting</h2>
+          <p>DISPATCH is secure-first and fully local. Run it self-hosted with no telemetry and no cloud dependency — air-gap friendly. The whole canvas is a file, so workflows version, diff, and review like code. See <a href="features/secure-local.html" class="doc-prose-link">Secure / Local</a>.</p>
+          <h3>Local models</h3>
+          <p>Point nodes at Ollama, llama.cpp, or LM Studio to run fully offline alongside (or instead of) cloud providers. See <a href="features/local-models.html" class="doc-prose-link">Local Models</a>.</p>
+          <h3>Rapid pod deployments</h3>
+          <p>Use the <strong class="text-ink-2 font-medium">Deploy</strong> node or <code>dispatch deploy --pod</code> to ship a whole canvas to a GPU pod via RunPod, serving a 70B-class model out of the box. See <a href="features/rapid-pod-deployments.html" class="doc-prose-link">Rapid Pod Deployments</a>.</p>
+        </section>
+
+        <div class="doc-rule"></div>
+
+        <!-- ===== API / PROVIDERS ===== -->
+        <section id="providers" class="doc-sec" data-toc="API / Providers" data-group="API / Providers">
+          <div class="doc-eyebrow"><span class="eyebrow">api / providers</span></div>
+          <h2 class="mt-3">API &amp; Providers</h2>
+          <p>Set a provider and model <strong class="text-ink-2 font-medium">per node</strong>, and hotswap either live, mid-run. Use the strongest model where it matters and a cheap or local one everywhere else. See <a href="features/model-hotswap.html" class="doc-prose-link">Model Hotswapping</a>.</p>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Provider</th><th>Example models</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><span class="t-node">OpenAI</span></td><td>gpt-4o, gpt-4o-mini</td><td>API key per workspace.</td></tr>
+                <tr><td><span class="t-node">Anthropic</span></td><td>opus, sonnet</td><td>API key per workspace.</td></tr>
+                <tr><td><span class="t-node">Google</span></td><td>gemini family</td><td>API key per workspace.</td></tr>
+                <tr><td><span class="t-node">Local</span></td><td>llama-70b, custom</td><td>Ollama · llama.cpp · LM Studio.</td></tr>
+                <tr><td><span class="t-node">Compatible</span></td><td>any endpoint</td><td>Any OpenAI-compatible base URL.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Directive control (MODELS.md)</h3>
+          <p>Govern every model on the canvas from one version-controlled file. See <a href="features/models-md-directive.html" class="doc-prose-link">MODELS.md Directive</a> and <a href="features/subscription-models.html" class="doc-prose-link">Subscription Models</a> for wiring non-API models via MCP.</p>
+
+          <div class="doc-rule"></div>
+          <p class="mt-6 text-[13.5px]">Need the runtime itself? <a href="https://github.com/h1kv/dispatch-tooling" class="doc-prose-link">Fork it on GitHub</a> — it's MIT licensed, yours to own.</p>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FIXED TOC (right rail) ============ -->
+  <aside class="docs-toc" aria-label="On this page">
+    <div class="toc-head">On this page</div>
+    <nav id="tocNav"></nav>
+  </aside>
+
+</main>
+
+<!-- ============ MOBILE SIDEBAR DRAWER ============ -->
+<div class="docs-drawer" id="docsDrawer" aria-hidden="true">
+  <div class="docs-drawer-scrim" id="drawerScrim"></div>
+  <div class="docs-drawer-panel">
+    <nav id="drawerNav"></nav>
+  </div>
+</div>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white docs-content-wrap">
+  <div class="py-12 px-12 md:px-12" style="max-width:920px;">
+    <div class="flex flex-wrap items-center justify-between gap-6">
+      <a href="./index.html" class="flex items-center gap-2.5">
+        <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+        <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+      </a>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13.5px] text-ink-body">
+        <a href="./index.html" class="hover:text-ink-2 transition-colors">Home</a>
+        <a href="./index.html#features" class="hover:text-ink-2 transition-colors">Features</a>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">GitHub</a>
+        <a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a>
+      </div>
+    </div>
+    <div class="mt-8 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> docs · all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ DOCS SCRIPT ============ -->
+<script>
+(function(){
+  'use strict';
+  var rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- Build sidebar + TOC from the sections in source order, grouped ---- */
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.doc-sec[data-group]'));
+  var groupsOrder = [];
+  var groupMap = {};
+  sections.forEach(function(s){
+    var g = s.getAttribute('data-group');
+    if(!groupMap[g]){ groupMap[g] = []; groupsOrder.push(g); }
+    groupMap[g].push(s);
+  });
+
+  function buildSidebar(target){
+    target.innerHTML = '';
+    groupsOrder.forEach(function(g){
+      var grp = document.createElement('div');
+      grp.className = 'side-group';
+      grp.setAttribute('data-sgroup', g);
+      var h = document.createElement('div');
+      h.className = 'side-head';
+      h.innerHTML = '<span class="sdot-sq"></span>' + g;
+      grp.appendChild(h);
+      groupMap[g].forEach(function(s){
+        var a = document.createElement('a');
+        a.className = 'side-link';
+        a.href = '#' + s.id;
+        a.setAttribute('data-target', s.id);
+        a.innerHTML = '<span class="ldot"></span><span class="slabel">' + (s.getAttribute('data-toc') || s.id) + '</span>';
+        grp.appendChild(a);
+      });
+      target.appendChild(grp);
+    });
+  }
+  var sideNav = document.getElementById('sideNav');
+  var drawerNav = document.getElementById('drawerNav');
+  buildSidebar(sideNav);
+  buildSidebar(drawerNav);
+
+  /* ---- TOC (flat list of all sections) ---- */
+  var tocNav = document.getElementById('tocNav');
+  sections.forEach(function(s){
+    var a = document.createElement('a');
+    a.className = 'toc-link';
+    a.href = '#' + s.id;
+    a.setAttribute('data-target', s.id);
+    a.textContent = s.getAttribute('data-toc') || s.id;
+    tocNav.appendChild(a);
+  });
+
+  /* ---- Smooth in-page anchor scroll (gated) ---- */
+  function onAnchorClick(e){
+    var a = e.target.closest('a[href^="#"]');
+    if(!a) return;
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if(!el) return;
+    e.preventDefault();
+    el.scrollIntoView({behavior: rm ? 'auto' : 'smooth', block: 'start'});
+    history.replaceState(null, '', '#' + id);
+    // close drawer if open
+    closeDrawer();
+  }
+  document.addEventListener('click', onAnchorClick);
+
+  /* ---- Scroll-spy: highlight active section in sidebar + TOC ---- */
+  var allLinks = function(){ return document.querySelectorAll('.side-link[data-target], .toc-link[data-target]'); };
+  var mobileLabel = document.getElementById('mobileSecLabel');
+  function setActive(id){
+    allLinks().forEach(function(l){
+      l.classList.toggle('is-active', l.getAttribute('data-target') === id);
+    });
+    var sec = document.getElementById(id);
+    if(sec && mobileLabel){ mobileLabel.textContent = sec.getAttribute('data-group') || ''; }
+  }
+
+  var io = new IntersectionObserver(function(entries){
+    // pick the entry nearest the top that is intersecting
+    var visible = entries.filter(function(e){ return e.isIntersecting; });
+    if(visible.length){
+      visible.sort(function(a,b){ return a.boundingClientRect.top - b.boundingClientRect.top; });
+      setActive(visible[0].target.id);
+    }
+  }, { rootMargin: '-62px 0px -65% 0px', threshold: 0 });
+  sections.forEach(function(s){ io.observe(s); });
+  // initialize
+  if(sections.length) setActive(sections[0].id);
+
+  /* ---- Reveal sections on scroll ---- */
+  if(!rm){
+    document.querySelectorAll('.doc-sec').forEach(function(s){ s.classList.add('doc-reveal'); });
+    var ro = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ e.target.classList.add('in'); ro.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
+    document.querySelectorAll('.doc-reveal').forEach(function(el){ ro.observe(el); });
+  }
+
+  /* ---- Search filter over sidebar items ---- */
+  var search = document.getElementById('docsSearch');
+  function applyFilter(q){
+    q = (q || '').trim().toLowerCase();
+    [sideNav, drawerNav].forEach(function(root){
+      var groups = root.querySelectorAll('.side-group');
+      groups.forEach(function(grp){
+        var links = grp.querySelectorAll('.side-link');
+        var anyVisible = false;
+        links.forEach(function(l){
+          var txt = (l.textContent || '').toLowerCase();
+          var match = !q || txt.indexOf(q) !== -1;
+          l.classList.toggle('is-hidden', !match);
+          if(match) anyVisible = true;
+        });
+        grp.classList.toggle('is-hidden', !anyVisible);
+      });
+    });
+  }
+  if(search){
+    search.addEventListener('input', function(){ applyFilter(search.value); });
+    // "/" focuses search
+    document.addEventListener('keydown', function(e){
+      if(e.key === '/' && document.activeElement !== search && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)){
+        e.preventDefault(); search.focus();
+      }
+      if(e.key === 'Escape' && document.activeElement === search){ search.value=''; applyFilter(''); search.blur(); }
+    });
+  }
+
+  /* ---- Mobile drawer ---- */
+  var drawer = document.getElementById('docsDrawer');
+  var drawerBtn = document.getElementById('drawerToggle');
+  var drawerScrim = document.getElementById('drawerScrim');
+  function openDrawer(){ drawer.classList.add('is-open'); drawer.setAttribute('aria-hidden','false'); if(drawerBtn) drawerBtn.setAttribute('aria-expanded','true'); document.body.style.overflow='hidden'; }
+  function closeDrawer(){ if(!drawer) return; drawer.classList.remove('is-open'); drawer.setAttribute('aria-hidden','true'); if(drawerBtn) drawerBtn.setAttribute('aria-expanded','false'); document.body.style.overflow=''; }
+  if(drawerBtn){
+    drawerBtn.addEventListener('click', function(){
+      drawer.classList.contains('is-open') ? closeDrawer() : openDrawer();
+    });
+  }
+  if(drawerScrim){ drawerScrim.addEventListener('click', closeDrawer); }
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && drawer && drawer.classList.contains('is-open')){ closeDrawer(); } });
+
+  /* ---- Review node demo (Approve/Reject) — purely cosmetic ---- */
+  document.querySelectorAll('.review-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      var node = b.closest('.review-node');
+      var dot = node.querySelector('.dot');
+      if(b.classList.contains('review-approve')){ dot.className = 'dot dot-done'; }
+      else { dot.className = 'dot dot-error'; }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

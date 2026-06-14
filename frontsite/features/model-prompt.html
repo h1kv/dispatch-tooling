@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Model Prompt</title>
+<meta name="description" content="Write a prompt; the model builds the node graph. Model Prompt gives the model full control and a live read of the canvas — it reasons about which nodes to place, how to wire them, and which models and tools to assign, adapting as the graph grows." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<style>
+  /* ===== Page-local: Model Prompt — prompt → graph builder demo ===== */
+  .teal{color:#0c7c7a;}
+
+  /* prompt picker chips */
+  .mp-chip{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #eaeaea;
+    padding:7px 11px;font-size:12.5px;color:#171717;cursor:pointer;text-align:left;
+    transition:border-color .18s var(--ease-hover),background .18s var(--ease-hover),color .18s;}
+  .mp-chip:hover{border-color:#0ea5a466;background:rgba(14,165,164,0.04);}
+  .mp-chip.on{border-color:#0ea5a4;background:rgba(14,165,164,0.06);color:#0c7c7a;}
+  .mp-chip .mp-chip-dot{width:6px;height:6px;background:#cfcfcf;flex:none;border-radius:9999px;transition:background .18s;}
+  .mp-chip.on .mp-chip-dot{background:#0ea5a4;}
+
+  /* prompt input box */
+  .mp-prompt{font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.7;color:#171717;}
+  .mp-caret{display:inline-block;width:7px;height:15px;background:#0ea5a4;margin-left:1px;
+    vertical-align:-2px;animation:mpBlink 1s step-end infinite;}
+  @keyframes mpBlink{0%,55%{opacity:1;}56%,100%{opacity:0;}}
+
+  /* the canvas stage the model builds into */
+  .mp-stage{position:relative;min-height:420px;background:#fff;
+    background-image:radial-gradient(#ededed 1px,transparent 1px);background-size:18px 18px;overflow:hidden;}
+
+  /* a node the model places */
+  .mp-node{position:absolute;width:188px;background:#fff;border:1px solid #eaeaea;padding:10px 11px;
+    opacity:0;transform:translateY(6px) scale(.98);
+    transition:opacity .4s var(--ease-out),transform .4s var(--ease-out),border-color .25s;}
+  .mp-node.in{opacity:1;transform:none;}
+  .mp-node.placing{border-color:#0ea5a4;box-shadow:0 0 0 3px rgba(14,165,164,0.1);}
+  .mp-node-head{display:flex;align-items:center;gap:8px;}
+  .mp-node-name{font-size:13px;font-weight:500;color:#171717;}
+  .mp-node-sub{margin-top:6px;font-family:'Geist Mono',monospace;font-size:10.5px;color:#737373;
+    display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+  .mp-pill{border:1px solid #eaeaea;padding:1px 5px;font-size:10px;color:#595959;}
+  .mp-pill-accent{border-color:#0ea5a433;color:#0c7c7a;background:rgba(14,165,164,0.05);}
+
+  /* marching-ant accent edges */
+  .mp-edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+  .mp-edge{fill:none;stroke:#635bff;stroke-width:1.5;stroke-dasharray:5 5;
+    stroke-dashoffset:0;opacity:0;transition:opacity .35s;}
+  .mp-edge.in{opacity:.85;animation:mpMarch .7s linear infinite;}
+  @keyframes mpMarch{to{stroke-dashoffset:-20;}}
+
+  /* status / reasoning log */
+  .mp-log{font-family:'Geist Mono',monospace;font-size:11.5px;line-height:1.75;}
+  .mp-log-row{display:flex;gap:8px;padding:1px 0;opacity:0;transform:translateY(2px);
+    animation:mpLogIn .35s var(--ease-out) forwards;}
+  @keyframes mpLogIn{to{opacity:1;transform:none;}}
+  .mp-log-mark{color:#0ea5a4;flex:none;}
+  .mp-log-mark-done{color:#16a34a;}
+
+  /* reduced motion: no marching, no transforms */
+  @media (prefers-reduced-motion: reduce){
+    .mp-node{transition:none;opacity:1;transform:none;}
+    .mp-edge.in{animation:none;}
+    .mp-log-row{animation:none;opacity:1;transform:none;}
+    .mp-caret{animation:none;}
+  }
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV (canonical, matches landing) ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html#top" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem" aria-current="page" style="color:#0c7c7a;background:#effbfa;"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close aria-current="page" style="color:#0c7c7a;"><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Nav behaviour (inline — feature pages don't load ../app.js): scroll opacity + dropdown + mobile sheet -->
+<script>
+(function(){
+  var nav=document.getElementById('nav');
+
+  // 1) Scroll-opacity: opaque nav-scrolled state past ~8px
+  if(nav){
+    var onScroll=function(){ nav.classList.toggle('nav-scrolled', window.scrollY>8); };
+    onScroll();
+    window.addEventListener('scroll',onScroll,{passive:true});
+  }
+
+  // 2) Desktop Features mega-menu: toggle + outside-click/Esc close
+  var wrap=document.getElementById('featMenuWrap');
+  var btn=document.getElementById('featMenuBtn');
+  var mega=document.getElementById('featMenu');
+  if(wrap&&btn&&mega){
+    function setMega(open){
+      wrap.classList.toggle('is-open',open);
+      btn.setAttribute('aria-expanded',String(open));
+      mega.hidden=!open;
+    }
+    btn.addEventListener('click',function(e){ e.stopPropagation(); setMega(!wrap.classList.contains('is-open')); });
+    document.addEventListener('click',function(e){ if(!wrap.contains(e.target)) setMega(false); });
+    mega.querySelectorAll('a').forEach(function(a){ a.addEventListener('click',function(){ setMega(false); }); });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&wrap.classList.contains('is-open')){ setMega(false); btn.focus(); }
+    });
+  }
+
+  // 3) Mobile menu sheet: toggle + Esc/resize close
+  var toggle=document.getElementById('navToggle');
+  var menu=document.getElementById('mobileMenu');
+  var openIcon=document.getElementById('navOpenIcon');
+  var closeIcon=document.getElementById('navCloseIcon');
+  if(toggle&&menu){
+    function setOpen(open){
+      menu.classList.toggle('hidden',!open);
+      toggle.setAttribute('aria-expanded',String(open));
+      toggle.setAttribute('aria-label',open?'Close menu':'Open menu');
+      if(openIcon)openIcon.classList.toggle('hidden',open);
+      if(closeIcon)closeIcon.classList.toggle('hidden',!open);
+    }
+    toggle.addEventListener('click',function(){ setOpen(menu.classList.contains('hidden')); });
+    menu.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click',function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&!menu.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize',function(){
+      if(window.innerWidth>=768&&!menu.classList.contains('hidden')) setOpen(false);
+    });
+
+    // 4) Mobile Features accordion
+    var acc=document.getElementById('navAcc');
+    if(acc){
+      var accBtn=acc.querySelector('.nav-acc-btn');
+      var accPanel=document.getElementById('navAccPanel');
+      if(accBtn&&accPanel){
+        accBtn.addEventListener('click',function(){
+          var open=accBtn.getAttribute('aria-expanded')==='true';
+          accBtn.setAttribute('aria-expanded',String(!open));
+          accPanel.hidden=open;
+        });
+      }
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen"></div>
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(14,165,164,0.06), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <a href="../index.html#features" class="link-arrow reveal text-[13px] mb-7" style="--tw:0">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      Back to all features
+    </a>
+
+    <div class="max-w-3xl">
+      <span class="eyebrow reveal" style="transition-delay:.02s">knowledge + extensibility · prompt → graph</span>
+
+      <h1 class="h1 mt-5 reveal" style="transition-delay:.05s">Model Prompt.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        Write a prompt; the model builds the graph. Hand the model full control and a live read of the canvas — it decides which nodes to place, how to wire them, and which model and tools each one runs, adapting as the graph grows.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span>
+        <span class="badge"><span class="mono">prompt → graph</span></span>
+        <span class="badge">Full model control</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT IS — deep explanation ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-16">
+      <div class="reveal">
+        <span class="eyebrow">what it is</span>
+        <h2 class="h2 mt-3">One prompt becomes a graph.</h2>
+        <p class="lead mt-4">Describe the outcome you want in plain language. The model reads your prompt <span class="text-ink-2">and the live canvas</span>, then <span class="teal">builds the node graph for you</span> — placing nodes, drawing the edges between them, and assigning a model and tools to each.</p>
+        <p class="mt-4 text-[15px] leading-relaxed text-ink-body">It reasons about the work the way you would: what to investigate first, where to fan out in <span class="mono text-ink-2">Parallel</span>, where a <span class="mono text-ink-2">Merge</span> pulls the threads back together, and where a <span class="mono text-ink-2">Review</span> gate belongs. As the graph grows it keeps a dynamic understanding of everything already on the canvas, so each new node wires into the structure that's already there instead of starting from scratch.</p>
+        <p class="mt-4 text-[15px] leading-relaxed text-ink-body">You stay in command: every node it places is a real, editable node. Accept the graph as-is, retarget a model, or extend the prompt and watch it grow.</p>
+      </div>
+
+      <!-- bento: what the model decides -->
+      <div class="bento-wrap reveal" style="transition-delay:.06s">
+        <div class="bento" style="grid-template-columns:repeat(2,1fr);">
+          <div class="cell"><span class="eyebrow">placement</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Which nodes</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">It picks the roles the task needs — <span class="mono">Investigate</span>, <span class="mono">Plan</span>, <span class="mono">Create</span> — and drops them on the canvas.</p></div>
+          <div class="cell"><span class="eyebrow">wiring</span><p class="mt-2 text-[14px] text-ink-2 font-medium">How they connect</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">It draws the edges so output and control flow downstream in the right order.</p></div>
+          <div class="cell"><span class="eyebrow">assignment</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Model + tools per node</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">Each node gets a fitting model and the tools it's allowed to call — a small model where it's cheap, a strong one where it counts.</p></div>
+          <div class="cell"><span class="eyebrow">awareness</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Live canvas read</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">It sees what's already placed and wires new work into it instead of duplicating nodes.</p></div>
+          <div class="cell"><span class="eyebrow">structure</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Branch + gate</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">It introduces <span class="mono">Parallel</span>, <span class="mono">Merge</span>, and <span class="mono">Review</span> gates when the work calls for them.</p></div>
+          <div class="cell"><span class="eyebrow">adaptation</span><p class="mt-2 text-[14px] text-ink-2 font-medium">Grows with the prompt</p><p class="mt-1.5 text-[12.5px] text-ink-body leading-relaxed">Extend the prompt and the graph extends — new nodes attach to the existing chain.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROMPT ↔ GRAPH — two directions ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">two directions</span>
+      <h2 class="h2 mt-3">Prompt and graph, both ways.</h2>
+      <p class="lead mt-4">A graph can be compiled down into one portable prompt. Model Prompt runs the opposite way — it reads a prompt and builds the graph. Same bridge between the two, opposite directions.</p>
+    </div>
+
+    <div class="mt-10 grid md:grid-cols-2 gap-px bg-hair border border-hair reveal" style="transition-delay:.06s">
+      <!-- prompt → graph (this page) -->
+      <div class="bg-white p-6 sm:p-7">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow teal">model prompt</span>
+          <span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span>
+        </div>
+        <p class="mt-4 mono text-[13px] text-ink-2 flex items-center gap-3 flex-wrap">
+          <span class="mp-pill">prompt</span>
+          <svg width="22" height="12" viewBox="0 0 22 12" fill="none" stroke="#0ea5a4" stroke-width="1.5" aria-hidden="true"><path d="M2 6h16M14 2l4 4-4 4"/></svg>
+          <span class="mp-pill mp-pill-accent">graph</span>
+        </p>
+        <p class="mt-4 text-[14px] text-ink-body leading-relaxed">You write what you want. The model decides the nodes, the wiring, and the model/tools per node — and keeps a live read of the canvas as it builds.</p>
+      </div>
+      <!-- graph → prompt (sibling) -->
+      <div class="bg-white p-6 sm:p-7">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">graph → prompt</span>
+          <span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span>
+        </div>
+        <p class="mt-4 mono text-[13px] text-ink-2 flex items-center gap-3 flex-wrap">
+          <span class="mp-pill">graph</span>
+          <svg width="22" height="12" viewBox="0 0 22 12" fill="none" stroke="#635bff" stroke-width="1.5" aria-hidden="true"><path d="M2 6h16M14 2l4 4-4 4"/></svg>
+          <span class="mp-pill" style="border-color:#635bff33;color:#4f48d6;background:rgba(99,91,255,0.05);">prompt</span>
+        </p>
+        <p class="mt-4 text-[14px] text-ink-body leading-relaxed">The opposite of compiling a graph down into a prompt — an existing canvas reduces to one portable, engineered prompt you can paste into any model.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO — the builder ============ -->
+<section class="border-b border-hair bg-white relative overflow-hidden">
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(14,165,164,0.05), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">interactive · the builder</span>
+      <h2 class="h2 mt-3">Pick a prompt. Watch the graph build.</h2>
+      <p class="lead mt-4">Choose a prompt below, then press <span class="text-ink-2">Build graph</span>. The model reasons step by step, places each node, and wires it into a runnable chain with marching edges.</p>
+    </div>
+
+    <div class="mt-10 grid lg:grid-cols-[0.92fr_1.08fr] gap-px bg-hair border border-hair reveal" id="mpDemo" style="transition-delay:.06s">
+
+      <!-- LEFT: prompt input + reasoning log -->
+      <div class="bg-white p-5 sm:p-6 flex flex-col">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">your prompt</span>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2"><span class="dot dot-test" id="mpPromptDot"></span> Testing</span>
+        </div>
+
+        <p class="mt-3 text-[12.5px] text-ink-body leading-relaxed">Pick a prompt — the model builds a graph from it.</p>
+
+        <!-- prompt chips -->
+        <div class="mt-4 flex flex-col gap-2" id="mpChips" role="group" aria-label="Pick a prompt">
+          <button class="mp-chip on" data-prompt="0" aria-pressed="true"><span class="mp-chip-dot"></span>Research 3 competitors and draft a one-page brief.</button>
+          <button class="mp-chip" data-prompt="1" aria-pressed="false"><span class="mp-chip-dot"></span>Refactor the auth layer, document it, and review.</button>
+          <button class="mp-chip" data-prompt="2" aria-pressed="false"><span class="mp-chip-dot"></span>Summarise these docs, then fact-check the summary.</button>
+        </div>
+
+        <!-- echoed prompt -->
+        <div class="mt-4 border border-hair bg-[#fafafa] px-3.5 py-3">
+          <div class="mp-prompt"><span class="text-ink-muted">›</span> <span id="mpPromptText">Research 3 competitors and draft a one-page brief.</span><span class="mp-caret" id="mpCaret"></span></div>
+        </div>
+
+        <button id="mpBuild" class="btn btn-dark h-11 px-5 text-[14px] mt-5 w-full justify-center">
+          <span id="mpBuildLabel">Build graph</span>
+        </button>
+
+        <!-- reasoning log -->
+        <div class="mt-5 border-t border-hair pt-4 flex-1">
+          <div class="eyebrow mb-2.5">model reasoning</div>
+          <div class="mp-log min-h-[96px]" id="mpLog" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: the canvas the model builds into -->
+      <div class="bg-white flex flex-col">
+        <div class="flex items-center justify-between px-4 h-11 border-b border-hair bg-white">
+          <div class="flex items-center gap-2">
+            <span class="term-dot" aria-hidden="true"></span>
+            <span class="mono text-[12px] text-ink-2">canvas · model-built</span>
+          </div>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="mpStageStatus"><span class="dot dot-idle" id="mpStageDot"></span> ready</span>
+        </div>
+
+        <div class="mp-stage flex-1" id="mpStage" aria-label="The node graph the model builds from your prompt">
+          <svg class="mp-edges" id="mpEdges" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div id="mpNodes"></div>
+        </div>
+
+        <div class="flex items-center justify-between px-4 h-10 border-t border-hair bg-white">
+          <span class="mono text-[11px] text-ink-muted">model-driven · editable nodes</span>
+          <span class="mono text-[11px] text-ink-muted" id="mpStats">0 nodes · 0 edges</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="mt-5 mono text-[12px] text-ink-muted reveal">One prompt → a wired graph. Every node it places is real and editable on your canvas.</p>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — build pipeline ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">From prompt to wired chain.</h2>
+      <p class="lead mt-4">The model treats the canvas as a tool it can act on, building the graph in a controlled loop.</p>
+    </div>
+
+    <div class="mt-10 grid md:grid-cols-3 gap-px bg-hair border border-hair reveal">
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] teal">01</span>
+        <h3 class="h3 mt-3">Read prompt + canvas</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">It parses your intent and takes a live read of what's already on the canvas — existing nodes, edges, and context.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] teal">02</span>
+        <h3 class="h3 mt-3">Plan + place nodes</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">It reasons about the steps, then places each node and assigns its model and tools — fanning out and gating where the work calls for it.</p>
+      </div>
+      <div class="bg-white p-6">
+        <span class="mono text-[12px] teal">03</span>
+        <h3 class="h3 mt-3">Wire + hand back</h3>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">It draws the edges into a runnable chain and hands you an editable graph — press Run, or keep extending the prompt.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="flex items-center gap-4 reveal">
+      <span class="eyebrow">related features</span>
+      <span class="feat-rule"></span>
+    </div>
+
+    <div class="feat-grid mt-8 reveal" style="transition-delay:.05s">
+      <a href="./models-md-directive.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">MODELS.md</span></div>
+        <h3 class="feat-title">Directive Model Control</h3>
+        <p class="feat-desc">One version-controlled file governs every model on the canvas.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./voice-control.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">VoiceOrb</span></div>
+        <h3 class="feat-title">Agentic Voice Control</h3>
+        <p class="feat-desc">Talk to your canvas — it edits the graph as you describe it.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./model-hotswap.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+        <h3 class="feat-title">Model Hotswapping</h3>
+        <p class="feat-desc">Set provider + model per node and swap live, mid-run.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-9">
+      Back to all features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Related</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="./models-md-directive.html" class="hover:text-ink-2 transition-colors">Directive Model Control</a></li>
+          <li><a href="./voice-control.html" class="hover:text-ink-2 transition-colors">Agentic Voice Control</a></li>
+          <li><a href="./model-hotswap.html" class="hover:text-ink-2 transition-colors">Model Hotswapping</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../docs.html" class="hover:text-ink-2 transition-colors">Docs</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ REVEAL OBSERVER (IntersectionObserver, reduced-motion safe) ============ -->
+<script>
+(function(){
+  var els=[].slice.call(document.querySelectorAll('.reveal'));
+  if(!els.length)return;
+  if(!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    els.forEach(function(el){el.classList.add('in');});return;
+  }
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  },{rootMargin:'0px 0px -8% 0px',threshold:0.05});
+  els.forEach(function(el){io.observe(el);});
+})();
+</script>
+
+<!-- ============ MODEL PROMPT — prompt → graph builder demo ============ -->
+<script>
+(function(){
+  var demo=document.getElementById('mpDemo');
+  if(!demo)return;
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var chipsWrap=document.getElementById('mpChips');
+  var promptText=document.getElementById('mpPromptText');
+  var caret=document.getElementById('mpCaret');
+  var buildBtn=document.getElementById('mpBuild');
+  var buildLabel=document.getElementById('mpBuildLabel');
+  var stage=document.getElementById('mpStage');
+  var nodesLayer=document.getElementById('mpNodes');
+  var edgesSvg=document.getElementById('mpEdges');
+  var logEl=document.getElementById('mpLog');
+  var statsEl=document.getElementById('mpStats');
+  var stageDot=document.getElementById('mpStageDot');
+  var stageStatus=document.getElementById('mpStageStatus');
+
+  // Each prompt → an ordered build plan. Nodes carry a grid row (0..n) and
+  // an optional column lane (0=left,1=center,2=right) for parallel branches.
+  // edges: [fromIndex, toIndex]
+  var PLANS=[
+    {
+      text:'Research 3 competitors and draft a one-page brief.',
+      reason:['Parse intent: research → synthesise → write',
+              'Placing Investigate · web_search',
+              'Adding Parallel fan-out: 3 competitors',
+              'Wiring Merge to consolidate findings',
+              'Closing with Draft · one-pager'],
+      nodes:[
+        {name:'Investigate',sub:'claude · sonnet',tool:'web_search',row:0,col:1,dot:'dot-done'},
+        {name:'Parallel · 3 scans',sub:'fan-out',tool:'',row:1,col:1,dot:'dot-done',accent:1},
+        {name:'Merge',sub:'gpt-4o',tool:'synthesis',row:2,col:1,dot:'dot-done'},
+        {name:'Draft brief',sub:'claude · opus',tool:'write_file',row:3,col:1,dot:'dot-run'}
+      ],
+      edges:[[0,1],[1,2],[2,3]]
+    },
+    {
+      text:'Refactor the auth layer, document it, and review.',
+      reason:['Parse intent: refactor + docs + gate',
+              'Placing Investigate · read_file',
+              'Fanning out: Refactor ∥ Document',
+              'Merging both branches',
+              'Adding Review gate · hold for sign-off'],
+      nodes:[
+        {name:'Investigate',sub:'gpt-4o',tool:'read_file',row:0,col:1,dot:'dot-done'},
+        {name:'Refactor',sub:'claude · opus',tool:'write_file',row:1,col:0,dot:'dot-done'},
+        {name:'Document',sub:'claude · sonnet',tool:'write_file',row:1,col:2,dot:'dot-done'},
+        {name:'Merge',sub:'gpt-4o',tool:'synthesis',row:2,col:1,dot:'dot-done'},
+        {name:'Review · gate',sub:'human checkpoint',tool:'',row:3,col:1,dot:'dot-run',accent:1}
+      ],
+      edges:[[0,1],[0,2],[1,3],[2,3],[3,4]]
+    },
+    {
+      text:'Summarise these docs, then fact-check the summary.',
+      reason:['Parse intent: summarise → verify',
+              'Placing Summarise · read_file',
+              'Adding Fact-check · web_search',
+              'Closing with Apply · final answer'],
+      nodes:[
+        {name:'Summarise',sub:'claude · sonnet',tool:'read_file',row:0,col:1,dot:'dot-done'},
+        {name:'Fact-check',sub:'gpt-4o',tool:'web_search',row:1,col:1,dot:'dot-done',accent:1},
+        {name:'Apply',sub:'claude · opus',tool:'write_file',row:2,col:1,dot:'dot-run'}
+      ]
+      ,edges:[[0,1],[1,2]]
+    }
+  ];
+
+  var current=0;
+  var building=false;
+  var timers=[];
+  function clearTimers(){ timers.forEach(clearTimeout); timers=[]; }
+  function after(ms,fn){ var t=setTimeout(fn,ms); timers.push(t); return t; }
+
+  // stage geometry
+  var ROW_H=96, TOP=22;
+  function laneX(col){
+    var w=stage.clientWidth||520;
+    var nodeW=188;
+    var center=(w-nodeW)/2;
+    if(col===0) return Math.max(14,center-120);
+    if(col===2) return Math.min(w-nodeW-14,center+120);
+    return center;
+  }
+  function nodeY(row){ return TOP+row*ROW_H; }
+
+  function setStatus(state,label){
+    stageDot.className='dot '+state;
+    stageStatus.innerHTML='<span class="dot '+state+'" id="mpStageDot"></span> '+label;
+    stageDot=document.getElementById('mpStageDot');
+  }
+
+  function resetStage(){
+    clearTimers();
+    nodesLayer.innerHTML='';
+    edgesSvg.innerHTML='';
+    logEl.innerHTML='';
+    statsEl.textContent='0 nodes · 0 edges';
+    setStatus('dot-idle','ready');
+  }
+
+  function makeNode(n){
+    var el=document.createElement('div');
+    el.className='mp-node';
+    el.style.left=laneX(n.col)+'px';
+    el.style.top=nodeY(n.row)+'px';
+    var pill=n.tool?'<span class="mp-pill">'+n.tool+'</span>':'';
+    var subCls=n.accent?'mp-pill mp-pill-accent':'mp-pill';
+    el.innerHTML='<div class="mp-node-head"><span class="dot '+n.dot+'"></span>'+
+      '<span class="mp-node-name">'+n.name+'</span></div>'+
+      '<div class="mp-node-sub"><span class="'+subCls+'">'+n.sub+'</span>'+pill+'</div>';
+    nodesLayer.appendChild(el);
+    return el;
+  }
+
+  function nodeCenterTop(n){ return {x:laneX(n.col)+94, y:nodeY(n.row)}; }
+  function nodeCenterBottom(n,el){ return {x:laneX(n.col)+94, y:nodeY(n.row)+(el?el.offsetHeight:58)}; }
+
+  function makeEdge(plan,els,a,b){
+    var from=plan.nodes[a], to=plan.nodes[b];
+    var p1=nodeCenterBottom(from,els[a]);
+    var p2=nodeCenterTop(to);
+    var midY=(p1.y+p2.y)/2;
+    var d='M'+p1.x+','+p1.y+' C'+p1.x+','+midY+' '+p2.x+','+midY+' '+p2.x+','+p2.y;
+    var path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('class','mp-edge');
+    path.setAttribute('d',d);
+    edgesSvg.appendChild(path);
+    return path;
+  }
+
+  function logRow(txt,done){
+    var row=document.createElement('div');
+    row.className='mp-log-row';
+    row.innerHTML='<span class="mp-log-mark'+(done?' mp-log-mark-done':'')+'">'+(done?'✓':'›')+'</span><span>'+txt+'</span>';
+    logEl.appendChild(row);
+    logEl.scrollTop=logEl.scrollHeight;
+  }
+
+  function build(){
+    if(building)return;
+    var plan=PLANS[current];
+    resetStage();
+    building=true;
+    buildLabel.textContent='Building…';
+    setStatus('dot-run pulse-run','building');
+
+    var els=[], paths=[];
+    var step= reduce?0:560;          // ms per node when animating
+    var lstep= reduce?0:420;         // ms per reasoning line
+
+    // 1) reasoning log
+    plan.reason.forEach(function(r,i){
+      after(i*lstep,function(){ logRow(r, false); });
+    });
+
+    // 2) place nodes one by one (after reasoning starts)
+    var nodeStart= reduce?0:plan.reason.length*lstep*0.5;
+    plan.nodes.forEach(function(n,i){
+      after(nodeStart+i*step,function(){
+        var el=makeNode(n);
+        els[i]=el;
+        if(reduce){ el.classList.add('in'); }
+        else{
+          el.classList.add('placing');
+          // force reflow then reveal
+          void el.offsetWidth;
+          el.classList.add('in');
+          after(260,function(){ el.classList.remove('placing'); });
+        }
+        statsEl.textContent=(i+1)+' node'+(i===0?'':'s')+' · '+paths.length+' edge'+(paths.length===1?'':'s');
+        // draw edges whose target is this node
+        plan.edges.forEach(function(e){
+          if(e[1]===i){
+            after(reduce?0:200,function(){
+              var p=makeEdge(plan,els,e[0],e[1]);
+              paths.push(p);
+              void p.getTotalLength&&p.getBoundingClientRect();
+              p.classList.add('in');
+              statsEl.textContent=els.filter(Boolean).length+' nodes · '+paths.length+' edge'+(paths.length===1?'':'s');
+            });
+          }
+        });
+      });
+    });
+
+    // 3) finish
+    var doneAt= reduce?0:nodeStart+plan.nodes.length*step+360;
+    after(doneAt,function(){
+      // mark reasoning rows done
+      [].slice.call(logEl.querySelectorAll('.mp-log-row')).forEach(function(row){
+        var mark=row.querySelector('.mp-log-mark');
+        if(mark){ mark.textContent='✓'; mark.classList.add('mp-log-mark-done'); }
+      });
+      logRow('Graph ready · '+plan.nodes.length+' nodes wired', true);
+      setStatus('dot-done','graph ready');
+      statsEl.textContent=plan.nodes.length+' nodes · '+plan.edges.length+' edges';
+      buildLabel.textContent='Rebuild graph';
+      building=false;
+    });
+  }
+
+  // chip selection
+  chipsWrap.querySelectorAll('.mp-chip').forEach(function(chip){
+    chip.addEventListener('click',function(){
+      if(building)return;
+      chipsWrap.querySelectorAll('.mp-chip').forEach(function(c){
+        c.classList.remove('on'); c.setAttribute('aria-pressed','false');
+      });
+      chip.classList.add('on'); chip.setAttribute('aria-pressed','true');
+      current=parseInt(chip.getAttribute('data-prompt'),10)||0;
+      promptText.textContent=PLANS[current].text;
+      resetStage();
+      buildLabel.textContent='Build graph';
+    });
+  });
+
+  buildBtn.addEventListener('click',build);
+
+  // re-place nodes/edges on resize (keep within stage, no overflow)
+  var rt=null;
+  window.addEventListener('resize',function(){
+    if(building)return;
+    clearTimeout(rt);
+    rt=setTimeout(function(){
+      var hasNodes=nodesLayer.children.length>0;
+      if(hasNodes){ build(); }
+    },220);
+  });
+
+  // initial idle state
+  resetStage();
+})();
+</script>
+
+</body>
+</html>

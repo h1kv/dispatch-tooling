@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Secure-first / Fully Local</title>
+<meta name="description" content="DISPATCH.AI runs entirely on your own machine or network — self-hosted, no telemetry, no account, air-gap friendly and offline-capable. Your data, prompts and code never leave the box." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<style>
+  /* current-page emphasis in the canonical nav (square, on-brand) */
+  .nav-mega-link.is-active,.nav-acc-link.is-active{color:#0a0a0a;font-weight:500;}
+  .nav-mega-link.is-active{background:#f5f5f5;}
+
+  /* ===== SECURE-LOCAL feature-local styles (square, hairline, on-brand) ===== */
+  .sl-stage{background:#fff;}
+
+  /* the boundary canvas: machine perimeter + nodes inside, blocked egress out */
+  .sl-canvas{
+    position:relative;overflow:hidden;background:#fff;
+    background-image:radial-gradient(#e8e8e8 1.1px, transparent 1.1px);
+    background-size:18px 18px;background-position:-1px -1px;
+  }
+
+  /* machine perimeter — a dashed square "boundary" that everything lives inside */
+  .sl-perimeter{
+    position:absolute;left:14px;top:14px;right:14px;bottom:14px;
+    border:1.5px dashed #cfcfcf;background:rgba(255,255,255,0.35);
+    transition:border-color .35s var(--ease-out),box-shadow .35s var(--ease-out),background .35s;
+  }
+  .sl-airgap .sl-perimeter{
+    border-color:#16a34a;background:rgba(22,163,74,0.04);
+    box-shadow:inset 0 0 0 3px rgba(22,163,74,0.06);
+  }
+  .sl-boundary-tag{
+    position:absolute;left:14px;top:-1px;transform:translateY(-50%);
+    background:#fff;border:1px solid #eaeaea;padding:3px 8px;
+    font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.08em;
+    text-transform:uppercase;color:#737373;display:inline-flex;align-items:center;gap:6px;
+    transition:border-color .3s,color .3s;
+  }
+  .sl-airgap .sl-boundary-tag{border-color:#16a34a55;color:#15803d;}
+  .sl-boundary-tag .bdot{width:6px;height:6px;border-radius:9999px !important;background:#737373;flex:none;transition:background .3s;}
+  .sl-airgap .sl-boundary-tag .bdot{background:#16a34a;}
+
+  /* node cards on the stage */
+  .sl-node{position:absolute;background:#fff;border:1px solid #eaeaea;padding:9px 11px;display:flex;align-items:center;gap:8px;font-size:13px;box-shadow:0 1px 2px rgba(10,10,10,.03);transition:border-color .3s,box-shadow .3s;z-index:3;}
+  .sl-node .nlabel{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;white-space:nowrap;}
+  .sl-node.is-run{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+
+  /* the world outside the box: cloud/telemetry targets that get blocked */
+  .sl-outside{position:absolute;display:flex;flex-direction:column;gap:7px;right:16px;z-index:2;}
+  .sl-target{display:flex;align-items:center;gap:8px;border:1px solid #eaeaea;background:#fafafa;padding:7px 10px;font-family:'Geist Mono',monospace;font-size:11px;color:#737373;transition:opacity .35s var(--ease-out),filter .35s;}
+  .sl-target .tdot{width:6px;height:6px;border-radius:9999px !important;background:#cfcfcf;flex:none;}
+  .sl-blocked .sl-target{opacity:.5;filter:grayscale(1);}
+
+  /* egress packet — a tiny square that tries to leave and gets stopped at the wall */
+  .sl-packet{position:absolute;width:7px;height:7px;background:#635bff;z-index:4;pointer-events:none;opacity:0;}
+
+  /* the "X" stamp shown where a packet is blocked at the perimeter */
+  .sl-stamp{position:absolute;z-index:5;pointer-events:none;font-family:'Geist Mono',monospace;font-size:11px;color:#ef4444;opacity:0;transform:translate(-50%,-50%);}
+
+  /* egress meter readout */
+  .sl-meter{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  .sl-meter > div{background:#fff;padding:12px 13px;display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .sl-meter .mk{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#737373;}
+  .sl-meter .mv{font-family:'Geist Mono',monospace;font-size:18px;color:#0a0a0a;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;}
+  .sl-meter .mv.ok{color:#15803d;}
+  .sl-meter .mv.acc{color:#635bff;}
+
+  /* air-gap switch (square) */
+  .sl-switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;min-height:40px;}
+  .sl-track{position:relative;width:46px;height:24px;border:1px solid #d6d6d6;background:#f4f4f4;transition:background .2s var(--ease-out),border-color .2s;flex:none;}
+  .sl-knob{position:absolute;top:1px;left:1px;width:20px;height:20px;background:#fff;border:1px solid #d6d6d6;transition:transform .2s var(--ease-out),border-color .2s,background .2s;}
+  .sl-switch[aria-pressed="true"] .sl-track{background:rgba(22,163,74,0.14);border-color:#16a34a;}
+  .sl-switch[aria-pressed="true"] .sl-knob{transform:translateX(22px);border-color:#16a34a;background:#16a34a;}
+  .sl-switch-label{font-family:'Geist Mono',monospace;font-size:12px;color:#595959;}
+
+  /* deep "what it is" feature rows */
+  .sl-props{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  @media (max-width:780px){ .sl-props{grid-template-columns:1fr;} }
+  .sl-prop{background:#fff;padding:20px;display:flex;flex-direction:column;}
+  .sl-prop-ic{width:30px;height:30px;border:1px solid #eaeaea;display:grid;place-items:center;color:#635bff;margin-bottom:12px;}
+
+  /* checklist of guarantees */
+  .sl-check{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid #eaeaea;}
+  .sl-check:last-child{border-bottom:0;}
+  .sl-check .ck{width:18px;height:18px;flex:none;border:1px solid #16a34a55;display:grid;place-items:center;color:#16a34a;margin-top:1px;}
+  .sl-check .ct{font-size:13.5px;color:#171717;line-height:1.5;}
+  .sl-check .cs{display:block;margin-top:2px;font-size:12.5px;color:#737373;line-height:1.5;}
+
+  @media (prefers-reduced-motion: reduce){
+    .sl-packet, .sl-stamp{display:none !important;}
+  }
+
+  /* keep the demo grid from overflowing on small screens */
+  @media (max-width:640px){
+    .sl-canvas{height:360px;}
+    .sl-node{padding:7px 9px;}
+    .sl-node .nlabel{font-size:11px;}
+    .sl-outside{right:8px;gap:6px;}
+    .sl-target{font-size:10px;padding:6px 8px;}
+    .sl-meter{grid-template-columns:1fr;}
+    .sl-meter > div{flex-direction:row;align-items:baseline;justify-content:space-between;gap:10px;}
+  }
+  @media (max-width:430px){
+    .sl-node{left:4% !important;}
+    .sl-outside{right:6px;}
+    .sl-target{font-size:9.5px;padding:5px 7px;letter-spacing:-0.01em;}
+  }
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Nav behavior: scroll-opacity + Features mega-menu + mobile sheet + accordion (feature pages don't load ../app.js) -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(pointer: coarse)').matches;
+
+  /* scroll state — opaque nav past ~8px (identical to landing) */
+  var nav = document.getElementById('nav');
+  if(nav){
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /* Desktop Features mega-menu */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn  = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  if(wrap && btn && menu){
+    var openTimer = null, closeTimer = null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menu.setAttribute('hidden','');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if(!isTouch){
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer = setTimeout(open, 60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer = setTimeout(close, 140); });
+    }
+    document.addEventListener('click', function(e){ if(isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && isOpen()){ close(); btn.focus(); }
+    });
+    menu.addEventListener('click', function(e){ if(e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle */
+  var toggle   = document.getElementById('navToggle');
+  var sheet    = document.getElementById('mobileMenu');
+  var openIcon = document.getElementById('navOpenIcon');
+  var closeIcon= document.getElementById('navCloseIcon');
+  if(toggle && sheet){
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if(openIcon) openIcon.classList.toggle('hidden', o);
+      if(closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click', function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && !sheet.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if(window.innerWidth >= 768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    /* Mobile Features accordion */
+    var accBtn   = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if(accBtn && accPanel){
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen"></div>
+  <div class="relative max-w-content mx-auto px-6 pt-20 pb-16 md:pt-24 md:pb-20">
+    <div class="max-w-3xl">
+      <div class="flex items-center gap-3 reveal">
+        <span class="eyebrow">infrastructure · local-first</span>
+        <a href="../index.html#features" class="mono text-[11px] text-ink-muted hover:text-ink-2 transition-colors">← all features</a>
+      </div>
+
+      <h1 class="h1 mt-6 reveal" style="transition-delay:.05s">Secure-first.<br>Fully local.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        DISPATCH runs entirely on your own machine — self&#8209;hosted, no telemetry, no account.
+        Your data, prompts and code never leave the box. Air&#8209;gap friendly and offline&#8209;capable.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-2.5 reveal" style="transition-delay:.15s">
+        <span class="feat-status feat-status-active"><span class="sdot"></span>Active</span>
+        <span class="badge">No telemetry</span>
+        <span class="badge">No account</span>
+        <span class="badge">Air-gap friendly</span>
+        <span class="badge">Offline-capable</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEEP EXPLANATION — bento ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">what it is</span>
+      <h2 class="h2 mt-3">The canvas lives on your hardware, not ours.</h2>
+      <p class="lead mt-4">DISPATCH is a runtime you clone and run — not a SaaS you log into. The graph, run engine, context store and every node execute as local processes. No hosted control plane, nothing phoning home. The only packets that leave the box are the model calls <span class="text-ink-2">you</span> wire to a cloud provider — bind to local models and there are none at all.</p>
+    </div>
+
+    <div class="bento-wrap mt-10 reveal">
+      <div class="bento">
+
+        <div class="cell" style="grid-column:span 7;">
+          <span class="eyebrow">the boundary</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Everything runs inside the perimeter.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed max-w-xl">The run engine that drives <span class="text-ink-2">Initialiser → Investigate → Plan → Create → Review</span> is a process on your machine. Node state, the shared <span class="text-ink-2">Context</span> store, analytics and logs are all written to local disk. Wiring a graph, pressing Run, gating a <span class="text-ink-2">Review</span> checkpoint — none of it touches an external server.</p>
+          <div class="mt-4 grid gap-2 mono text-[12px]">
+            <div class="flex items-center gap-2.5 border border-hair px-3 py-2.5"><span class="dot dot-done"></span><span class="nlabel">run engine</span><span class="ml-auto text-accent">localhost</span></div>
+            <div class="flex items-center gap-2.5 border border-hair px-3 py-2.5"><span class="dot dot-done"></span><span class="nlabel">Context store</span><span class="ml-auto text-ink-muted">./.dispatch/state</span></div>
+            <div class="flex items-center gap-2.5 border border-hair px-3 py-2.5"><span class="dot dot-done"></span><span class="nlabel">analytics + logs</span><span class="ml-auto text-ink-muted">on-disk</span></div>
+          </div>
+        </div>
+
+        <div class="cell" style="grid-column:span 5;">
+          <span class="eyebrow">what we never collect</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Zero telemetry. By design.</p>
+          <div class="mt-4">
+            <div class="sl-check"><span class="ck"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 7l3.5 3.5L12 3.5"/></svg></span><span class="ct">No analytics beacons<span class="cs">No usage pings, no crash uploads, no "anonymous" metrics.</span></span></div>
+            <div class="sl-check"><span class="ck"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 7l3.5 3.5L12 3.5"/></svg></span><span class="ct">No account, no sign-in<span class="cs">Clone, run, work. There is no login wall and no identity to track.</span></span></div>
+            <div class="sl-check"><span class="ck"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 7l3.5 3.5L12 3.5"/></svg></span><span class="ct">No hidden egress<span class="cs">It's MIT — read the source and confirm exactly what each node sends.</span></span></div>
+          </div>
+        </div>
+
+        <div class="cell" style="grid-column:span 4;">
+          <div class="sl-prop-ic"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5l5.5 2.2v3.3c0 3.4-2.3 5.9-5.5 7-3.2-1.1-5.5-3.6-5.5-7V3.7L8 1.5z"/></svg></div>
+          <span class="eyebrow">why it matters</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Data residency, solved.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed">Regulated, sensitive, or just private work stays where it's generated. Source code, customer records and prompts are written to your disk — not to a vendor's logs.</p>
+        </div>
+
+        <div class="cell" style="grid-column:span 4;">
+          <div class="sl-prop-ic"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M8 2v12M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></div>
+          <span class="eyebrow">why it matters</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Air-gap friendly.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed">Pair it with <span class="text-ink-2">Local Models</span> and a whole orchestration runs on a box that has never touched the internet. No external calls means no attack surface to the outside world.</p>
+        </div>
+
+        <div class="cell" style="grid-column:span 4;">
+          <div class="sl-prop-ic"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 8a5 5 0 019.5-2M13 8a5 5 0 01-9.5 2M12 2v3h-3M4 14v-3h3"/></svg></div>
+          <span class="eyebrow">why it matters</span>
+          <p class="mt-3 text-[15px] text-ink-2 font-medium">Offline-capable.</p>
+          <p class="mt-3 text-[13px] text-ink-body leading-relaxed">Pull the network cable and the canvas keeps running. Local-bound nodes execute, edges animate, <span class="text-ink-2">Review</span> gates fire — the run never depended on a connection.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO — egress boundary + air-gap ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">try it</span>
+      <h2 class="h2 mt-3">Watch the data stay inside the box.</h2>
+      <p class="lead mt-4">A chain runs inside your machine's perimeter. Every node tries to emit telemetry; every packet is stopped at the wall. Flip <span class="text-ink-2">Air-gap</span> to sever the network and confirm the run keeps flowing at <span class="text-ink-2">0 bytes</span> egress.</p>
+    </div>
+
+    <div class="sl-stage mt-10 border border-hair bg-white reveal" id="slStage" style="transition-delay:.06s">
+      <!-- top bar -->
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-4 sm:px-5 py-3 sm:h-11 sm:py-0">
+        <span class="eyebrow">egress monitor · live</span>
+        <div class="flex items-center gap-4">
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="slStatus"><span class="dot dot-run pulse-run"></span> running locally</span>
+          <!-- air-gap toggle -->
+          <button class="sl-switch" id="slAirgap" type="button" aria-pressed="false" aria-label="Toggle air-gap mode">
+            <span class="sl-switch-label">Air-gap</span>
+            <span class="sl-track"><span class="sl-knob"></span></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="p-4 sm:p-6">
+        <!-- the boundary canvas -->
+        <div class="sl-canvas" id="slCanvas" style="height:300px;" aria-label="A node chain running inside the machine perimeter, with all outbound packets blocked">
+          <!-- machine perimeter -->
+          <div class="sl-perimeter">
+            <span class="sl-boundary-tag"><span class="bdot"></span><span id="slBoundaryLabel">your machine</span></span>
+          </div>
+
+          <!-- nodes inside the perimeter (positioned absolutely) -->
+          <div class="sl-node is-run" id="slNode0" style="left:5%;top:24%;"><span class="dot dot-run pulse-run"></span><span class="nlabel">Investigate</span></div>
+          <div class="sl-node" id="slNode1" style="left:5%;top:50%;"><span class="dot dot-idle"></span><span class="nlabel">Plan</span></div>
+          <div class="sl-node" id="slNode2" style="left:5%;top:74%;"><span class="dot dot-idle"></span><span class="nlabel">Create</span></div>
+
+          <!-- the outside world: telemetry / cloud targets, blocked -->
+          <div class="sl-outside" style="top:22%;">
+            <span class="sl-target"><span class="tdot"></span>telemetry.vendor</span>
+            <span class="sl-target"><span class="tdot"></span>analytics.cloud</span>
+            <span class="sl-target"><span class="tdot"></span>accounts.api</span>
+          </div>
+
+          <!-- egress packet + blocked stamp (driven by JS) -->
+          <div class="sl-packet" id="slPacket"></div>
+          <div class="sl-stamp" id="slStamp">✕ blocked</div>
+        </div>
+
+        <!-- egress meter -->
+        <div class="sl-meter mt-5">
+          <div>
+            <span class="mk">bytes egress</span>
+            <span class="mv ok" id="slBytes">0</span>
+          </div>
+          <div>
+            <span class="mk">packets blocked</span>
+            <span class="mv acc" id="slBlocked">0</span>
+          </div>
+          <div>
+            <span class="mk">network</span>
+            <span class="mv" id="slNet">local only</span>
+          </div>
+        </div>
+
+        <p class="mt-4 mono text-[11.5px] text-ink-muted" id="slNote">Every node runs on this machine. Outbound telemetry never leaves the perimeter — egress holds at 0 bytes.</p>
+      </div>
+
+      <!-- footer link back -->
+      <a href="../index.html#features" class="stream-cta flex items-center justify-between border-t border-hair px-4 sm:px-5 h-12 mono text-[12px] text-ink-body hover:bg-[#fafafa] transition-colors">
+        <span>Back to all features</span>
+        <span class="link-arrow text-[12px]">all features
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — props ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">Self-hosted from the first command.</h2>
+      <p class="lead mt-4">There is no onboarding flow and no cloud bootstrap. You clone the MIT runtime, point your nodes at the models you choose, and run. Connectivity is opt-in, per node.</p>
+    </div>
+
+    <div class="sl-props mt-10 reveal">
+      <div class="sl-prop">
+        <span class="mono text-[11px] text-accent tracking-wide">01</span>
+        <h3 class="h3 mt-3">Clone &amp; run</h3>
+        <p class="mt-2 text-[13px] text-ink-body leading-relaxed"><span class="mono text-ink-2">git clone</span> then start the runtime. It binds to <span class="mono text-ink-2">localhost</span> and serves the canvas to your browser — no account, no setup server, no callback.</p>
+      </div>
+      <div class="sl-prop">
+        <span class="mono text-[11px] text-accent tracking-wide">02</span>
+        <h3 class="h3 mt-3">Choose your reach</h3>
+        <p class="mt-2 text-[13px] text-ink-body leading-relaxed">Bind nodes to cloud providers if you want them, or to <span class="mono text-ink-2">local</span> models for zero egress. Outbound calls are exactly the ones you wire — nothing implicit.</p>
+      </div>
+      <div class="sl-prop">
+        <span class="mono text-[11px] text-accent tracking-wide">03</span>
+        <h3 class="h3 mt-3">Run &amp; audit</h3>
+        <p class="mt-2 text-[13px] text-ink-body leading-relaxed">State and logs land on your disk. Because the runtime is open source, you can read or instrument every byte that crosses the boundary — and confirm there isn't one.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="feat-grouphead reveal"><span class="eyebrow">related features</span><span class="feat-rule"></span></div>
+
+    <div class="feat-grid mt-6 reveal">
+      <a href="./local-models.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">offline</span></div>
+        <h3 class="feat-title">Local Models</h3>
+        <p class="feat-desc">Ollama, llama.cpp, LM Studio — fully local, alongside the cloud.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./multiplayer-collab.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">LAN</span></div>
+        <h3 class="feat-title">Local-network Collaboration</h3>
+        <p class="feat-desc">Name-tagged cursors, inline comments, live node-wiring — no cloud.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./rapid-pod-deployments.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span><span class="feat-tag">RunPod GPU</span></div>
+        <h3 class="feat-title">Rapid Pod Deployments</h3>
+        <p class="feat-desc">Ship a canvas to a GPU pod serving a 70B-class model.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-8 reveal">
+      Back to all features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+          <li><a href="../index.html#deploy" class="hover:text-ink-2 transition-colors">Pod deployments</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+          <li><span class="text-ink-2">Local · self-hosted</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ PAGE SCRIPTS — reveal + interactive egress-boundary demo ============ -->
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- scroll reveal (IntersectionObserver-gated) ---- */
+  var reveals = document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window && !reduce){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, {rootMargin:'0px 0px -10% 0px', threshold:0.1});
+    reveals.forEach(function(el){ io.observe(el); });
+  } else {
+    reveals.forEach(function(el){ el.classList.add('in'); });
+  }
+
+  /* ---- egress-boundary demo ---- */
+  var stage    = document.getElementById('slStage');
+  var canvas   = document.getElementById('slCanvas');
+  var packet   = document.getElementById('slPacket');
+  var stamp    = document.getElementById('slStamp');
+  var elBlocked= document.getElementById('slBlocked');
+  var elBytes  = document.getElementById('slBytes');
+  var elNet    = document.getElementById('slNet');
+  var elNote   = document.getElementById('slNote');
+  var elStatus = document.getElementById('slStatus');
+  var elBLabel = document.getElementById('slBoundaryLabel');
+  var airBtn   = document.getElementById('slAirgap');
+  var nodes    = [
+    document.getElementById('slNode0'),
+    document.getElementById('slNode1'),
+    document.getElementById('slNode2')
+  ];
+
+  var blocked = 0;
+  var nodeIdx = 0;
+  var running = false;
+  var loopTimer = null;
+  var packetAnim = null;
+
+  /* advance the running node down the chain (visual life) */
+  function stepNode(){
+    nodes.forEach(function(n,i){
+      var dot = n.querySelector('.dot');
+      if(i < nodeIdx){
+        n.classList.remove('is-run');
+        if(dot){ dot.className = 'dot dot-done'; }
+      } else if(i === nodeIdx){
+        n.classList.add('is-run');
+        if(dot){ dot.className = 'dot dot-run pulse-run'; }
+      } else {
+        n.classList.remove('is-run');
+        if(dot){ dot.className = 'dot dot-idle'; }
+      }
+    });
+    nodeIdx = (nodeIdx + 1) % nodes.length;
+  }
+
+  /* fire one egress packet from the active node → it dies at the wall */
+  function firePacket(){
+    if(reduce) return;
+    var crect = canvas.getBoundingClientRect();
+    var src = nodes[(nodeIdx + nodes.length - 1) % nodes.length] || nodes[0];
+    var srect = src.getBoundingClientRect();
+    // start at the node's right edge
+    var startX = (srect.right - crect.left);
+    var startY = (srect.top - crect.top) + srect.height/2;
+    // perimeter wall sits ~14px inside the right edge
+    var wallX = crect.width - 16;
+    packet.style.transition = 'none';
+    packet.style.opacity = '1';
+    packet.style.left = startX + 'px';
+    packet.style.top  = (startY - 3) + 'px';
+    // force reflow so the next transition runs
+    void packet.offsetWidth;
+    packet.style.transition = 'left .55s linear, top .55s linear';
+    packet.style.left = wallX + 'px';
+    if(packetAnim){ clearTimeout(packetAnim); }
+    // when it reaches the wall: blocked
+    packetAnim = setTimeout(function(){
+      packet.style.transition = 'opacity .2s';
+      packet.style.opacity = '0';
+      // stamp the block at the wall
+      stamp.style.left = wallX + 'px';
+      stamp.style.top  = (startY) + 'px';
+      stamp.style.transition = 'none';
+      stamp.style.opacity = '1';
+      void stamp.offsetWidth;
+      stamp.style.transition = 'opacity .6s';
+      stamp.style.opacity = '0';
+      blocked++;
+      elBlocked.textContent = blocked;
+      // egress always holds at 0 — that's the whole point
+      elBytes.textContent = '0';
+    }, 560);
+  }
+
+  function loop(){
+    if(!running) return;
+    stepNode();
+    firePacket();
+    loopTimer = setTimeout(loop, 1500);
+  }
+
+  function start(){
+    if(running) return;
+    running = true;
+    loop();
+  }
+  function stop(){
+    running = false;
+    if(loopTimer){ clearTimeout(loopTimer); loopTimer = null; }
+    if(packetAnim){ clearTimeout(packetAnim); packetAnim = null; }
+  }
+
+  /* reduced-motion / no-IO → static finished state */
+  function staticState(){
+    nodes.forEach(function(n,i){
+      var dot = n.querySelector('.dot');
+      n.classList.toggle('is-run', i===0);
+      if(dot){ dot.className = i===0 ? 'dot dot-run pulse-run' : 'dot dot-done'; }
+    });
+    elBlocked.textContent = '128';
+    elBytes.textContent = '0';
+  }
+
+  /* gate to visibility */
+  if('IntersectionObserver' in window && !reduce){
+    var vio = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ start(); }
+        else { stop(); }
+      });
+    }, {threshold:0.3});
+    vio.observe(stage);
+  } else {
+    staticState();
+  }
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ stop(); }
+    else if(!reduce){ start(); }
+  });
+
+  /* ---- air-gap toggle ---- */
+  airBtn.addEventListener('click', function(){
+    var on = airBtn.getAttribute('aria-pressed') === 'true';
+    on = !on;
+    airBtn.setAttribute('aria-pressed', String(on));
+    stage.classList.toggle('sl-airgap', on);
+    stage.classList.toggle('sl-blocked', on);
+    if(on){
+      elNet.textContent   = 'severed';
+      elNet.className     = 'mv ok';
+      elBLabel.textContent= 'air-gapped';
+      elNote.textContent  = 'Network severed at the perimeter. The chain runs entirely on local models — 0 bytes leave the machine.';
+      elStatus.innerHTML  = '<span class="dot dot-done"></span> air-gapped · running';
+    } else {
+      elNet.textContent   = 'local only';
+      elNet.className     = 'mv';
+      elBLabel.textContent= 'your machine';
+      elNote.textContent  = 'Every node runs on this machine. Outbound telemetry never leaves the perimeter — egress holds at 0 bytes.';
+      elStatus.innerHTML  = '<span class="dot dot-run pulse-run"></span> running locally';
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

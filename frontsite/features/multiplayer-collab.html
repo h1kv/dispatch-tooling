@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Local-network Collaboration</title>
+<meta name="description" content="Your whole team edits the same DISPATCH.AI canvas live over your LAN — named cursors, inline comments, and teammates wiring nodes together in real time. Local-first, no cloud, nothing leaves your network." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) — shared design system -->
+<link rel="stylesheet" href="../styles.css" />
+
+<!-- Page-local styles: collab demo surfaces (square, hairline, on-brand) -->
+<style>
+  /* presence rail — connected peers over the LAN */
+  .peer-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid #eaeaea;background:#fff;padding:5px 9px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.02em;color:#171717;}
+  .peer-swatch{width:8px;height:8px;display:inline-block;flex:none;border-radius:9999px !important;}
+
+  /* the bespoke live demo stage */
+  .mc-stage{position:relative;background:#fff;}
+  .mc-canvas{
+    position:relative;overflow:hidden;height:480px;
+    background-color:#fff;
+    background-image:radial-gradient(#e2e2e2 1.1px, transparent 1.1px);
+    background-size:22px 22px;background-position:-1px -1px;
+  }
+  @media (max-width:640px){ .mc-canvas{height:420px;} }
+
+  /* node cards on the stage (reuse .node visuals, absolutely placed) */
+  .mc-node{position:absolute;background:#fff;border:1px solid #eaeaea;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:13px;box-shadow:0 1px 2px rgba(10,10,10,.03);transition:border-color .25s,box-shadow .25s;}
+  .mc-node .nlabel{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+  .mc-node.is-selected{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.10);}
+  .mc-node.is-wiring{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.14);}
+
+  /* the edge a teammate is wiring in, live */
+  .mc-wire{stroke:#635bff;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-dasharray:6 6;}
+  .mc-wire.drawing{animation:mcMarch 1s linear infinite;}
+  @keyframes mcMarch{to{stroke-dashoffset:-12;}}
+
+  /* roaming cursor — square pointer + mono name tag */
+  .mc-cursor{position:absolute;top:0;left:0;display:flex;align-items:flex-start;gap:0;pointer-events:none;will-change:transform;z-index:10;}
+  .mc-cursor svg{display:block;color:var(--cc);filter:drop-shadow(0 1px 1px rgba(10,10,10,.18));}
+  .mc-tag{margin-top:9px;margin-left:-2px;background:var(--cc);color:#fff;font-family:'Geist Mono',monospace;font-size:10px;line-height:1;letter-spacing:0.04em;padding:3px 5px;box-shadow:0 1px 2px rgba(10,10,10,.16);}
+
+  /* inline comment bubble pinned to the canvas */
+  .mc-comment{position:absolute;display:flex;align-items:stretch;z-index:9;box-shadow:0 2px 6px rgba(10,10,10,.10);max-width:260px;}
+  .mc-comment-tag{background:var(--cc);color:#fff;font-family:'Geist Mono',monospace;font-size:10px;line-height:1.2;letter-spacing:0.04em;padding:6px 7px;display:flex;align-items:center;}
+  .mc-comment-body{background:#fff;border:1px solid #eaeaea;border-left:0;color:#171717;font-size:12px;line-height:1.35;padding:6px 9px;display:flex;align-items:center;}
+
+  /* sync feed — the wire-format event log on the right of the demo */
+  .mc-feed{display:flex;flex-direction:column;gap:1px;background:#eaeaea;border:1px solid #eaeaea;max-height:480px;overflow:hidden;}
+  @media (max-width:640px){ .mc-feed{max-height:none;} }
+  .mc-feed-row{background:#fff;padding:9px 12px;display:flex;align-items:center;gap:9px;font-family:'Geist Mono',monospace;font-size:11.5px;line-height:1.3;}
+  .mc-feed-row .peer-swatch{width:7px;height:7px;}
+  .mc-feed-who{color:#171717;min-width:32px;}
+  .mc-feed-what{color:#595959;}
+  .mc-feed-t{margin-left:auto;color:#b3b3b3;font-size:10px;font-variant-numeric:tabular-nums;}
+
+  /* small square step diagram for "how it works" */
+  .mc-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  @media (max-width:760px){ .mc-flow{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:420px){ .mc-flow{grid-template-columns:1fr;} }
+  .mc-flow-cell{background:#fff;padding:18px 16px;display:flex;flex-direction:column;gap:8px;min-height:140px;}
+  .mc-flow-k{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#737373;}
+  .mc-flow-t{font-family:'Geist',sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.02em;color:#0a0a0a;line-height:1.2;}
+  .mc-flow-d{font-size:12.5px;line-height:1.5;color:#595959;margin-top:auto;}
+
+  /* bento-ish explainer grid */
+  .mc-bento{display:grid;grid-template-columns:repeat(12,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  .mc-tile{background:#fff;padding:22px;display:flex;flex-direction:column;}
+  @media (max-width:820px){ .mc-bento{grid-template-columns:1fr;} .mc-tile{grid-column:auto !important;} }
+
+  /* property rows */
+  .mc-prop{display:flex;align-items:center;gap:9px;font-family:'Geist Mono',monospace;font-size:12px;padding:8px 0;border-top:1px solid #eaeaea;}
+  .mc-prop:first-of-type{border-top:0;}
+  .mc-prop .k{color:#737373;}
+  .mc-prop .v{margin-left:auto;color:#171717;}
+
+  /* related row */
+  .rel-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  @media (max-width:760px){ .rel-grid{grid-template-columns:1fr;} }
+  .rel-card{position:relative;display:flex;flex-direction:column;background:#fff;padding:18px 18px 16px;min-height:140px;text-decoration:none;
+    transition:transform .16s var(--ease-hover),box-shadow .16s var(--ease-hover);}
+  .rel-card::before{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:#635bff;transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease-out);}
+  .rel-card:hover{transform:translateY(-2px);z-index:5;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 1px 2px rgba(10,10,10,.04), 0 10px 26px -14px rgba(10,10,10,.16);}
+  .rel-card:hover::before{transform:scaleX(1);}
+  .rel-title{margin-top:12px;font-family:'Geist',sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.02em;color:#0a0a0a;line-height:1.2;}
+  .rel-desc{margin-top:7px;font-size:12.5px;line-height:1.5;color:#595959;}
+  .rel-open{margin-top:auto;padding-top:12px;display:inline-flex;align-items:center;gap:6px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.04em;color:#737373;transition:color .15s;}
+  .rel-open svg{color:#635bff;transition:transform .15s var(--ease-hover);}
+  .rel-card:hover .rel-open{color:#0a0a0a;}
+  .rel-card:hover .rel-open svg{transform:translateX(3px);}
+
+  @media (max-width:640px){ .mc-comment{ font-size:11px; } }
+  @media (prefers-reduced-motion: reduce){ .mc-cursor{transition:none;} .mc-wire.drawing{animation:none;} }
+
+  /* current page marker in the Features menu */
+  .nav-mega-link[aria-current="page"],
+  .nav-acc-link[aria-current="page"]{color:#0a0a0a;font-weight:500;}
+  .nav-mega-link[aria-current="page"]{background:#f7f7f8;}
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV (canonical — matches landing) ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html#top" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem" aria-current="page"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close aria-current="page"><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Inline nav behavior (feature pages don't load ../app.js): scroll-opacity + mega-menu + mobile sheet + accordion -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(hover: none)').matches;
+
+  /* Scroll state — opaque glass past ~8px (identical to landing) */
+  var nav = document.getElementById('nav');
+  if (nav) {
+    var onScroll = function(){ nav.classList.toggle('nav-scrolled', window.scrollY > 8); };
+    onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /* Desktop Features mega-menu */
+  var wrap = document.getElementById('featMenuWrap');
+  var btn = document.getElementById('featMenuBtn');
+  var menu = document.getElementById('featMenu');
+  if (wrap && btn && menu) {
+    var openTimer = null, closeTimer = null;
+    var isOpen = function(){ return wrap.classList.contains('is-open'); };
+    var open = function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menu.removeAttribute('hidden');
+    };
+    var close = function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menu.setAttribute('hidden','');
+    };
+    btn.addEventListener('click', function(e){ e.stopPropagation(); isOpen() ? close() : open(); });
+    if (!isTouch) {
+      wrap.addEventListener('pointerenter', function(){ clearTimeout(closeTimer); openTimer = setTimeout(open, 60); });
+      wrap.addEventListener('pointerleave', function(){ clearTimeout(openTimer); closeTimer = setTimeout(close, 140); });
+    }
+    document.addEventListener('click', function(e){ if (isOpen() && !wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && isOpen()) { close(); btn.focus(); } });
+    menu.addEventListener('click', function(e){ if (e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle */
+  var toggle = document.getElementById('navToggle');
+  var sheet = document.getElementById('mobileMenu');
+  var openIcon = document.getElementById('navOpenIcon');
+  var closeIcon = document.getElementById('navCloseIcon');
+  if (toggle && sheet) {
+    var setOpen = function(o){
+      sheet.classList.toggle('hidden', !o);
+      toggle.setAttribute('aria-expanded', String(o));
+      toggle.setAttribute('aria-label', o ? 'Close menu' : 'Open menu');
+      if (openIcon) openIcon.classList.toggle('hidden', o);
+      if (closeIcon) closeIcon.classList.toggle('hidden', !o);
+    };
+    toggle.addEventListener('click', function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){ el.addEventListener('click', function(){ setOpen(false); }); });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && !sheet.classList.contains('hidden')) { setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize', function(){
+      if (window.innerWidth >= 768 && !sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    /* Mobile Features accordion */
+    var accBtn = sheet.querySelector('.nav-acc-btn');
+    var accPanel = document.getElementById('navAccPanel');
+    if (accBtn && accPanel) {
+      accBtn.addEventListener('click', function(){
+        var expanded = accBtn.getAttribute('aria-expanded') === 'true';
+        accBtn.setAttribute('aria-expanded', String(!expanded));
+        accPanel.toggleAttribute('hidden', expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 border-b border-hair overflow-hidden">
+  <div class="hero-sheen" aria-hidden="true"></div>
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(60% 50% at 30% 12%, rgba(99,91,255,0.05), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-16 pb-14 md:pt-20 md:pb-16">
+    <div class="max-w-3xl">
+      <a href="../index.html#features" class="link-arrow mb-6 reveal text-[13px]" style="--ease-hover:cubic-bezier(.4,0,.2,1)">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+        Back to all features
+      </a>
+
+      <span class="eyebrow reveal" style="transition-delay:.02s">local-network collaboration</span>
+
+      <h1 class="h1 mt-5 reveal" style="transition-delay:.05s">Your whole team, one live canvas.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        Everyone edits the same DISPATCH canvas in real time over your LAN — named cursors, inline comments,
+        and live node-wiring. Local&#8209;first: no cloud, no account, nothing leaves your network.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <!-- STATUS CHIP — Active (green dot) -->
+        <span class="feat-status feat-status-active"><span class="sdot"></span>Active</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-x-3 gap-y-1 flex-wrap">
+          <span class="flex items-center gap-2"><span class="dot dot-run pulse-run"></span> named cursors</span>
+          <span class="text-hair">·</span><span>inline comments</span>
+          <span class="text-hair">·</span><span>live wiring</span>
+          <span class="text-hair">·</span><span class="text-ink-2">no cloud</span>
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ THE LIVE DEMO — shared canvas over LAN ============ -->
+<section class="max-w-content mx-auto px-6 py-16 md:py-20">
+  <div class="max-w-2xl reveal">
+    <span class="eyebrow">live demo</span>
+    <h2 class="h2 mt-3">Four teammates. One graph. Zero refresh.</h2>
+    <p class="lead mt-4">A live render, not a screenshot. Cursors roam the shared canvas, kai is wiring <span class="text-ink-2">Plan&nbsp;→&nbsp;Create</span>, and a comment is pinned to a node. The feed on the right is the presence stream every peer receives over the LAN.</p>
+  </div>
+
+  <div class="mt-10 grid lg:grid-cols-[1.5fr_1fr] gap-6 reveal" style="transition-delay:.06s">
+    <!-- STAGE -->
+    <div class="mc-stage border border-hair">
+      <!-- top bar: presence -->
+      <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-12 bg-white">
+        <span class="eyebrow">shared canvas · lan</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> <span id="mcCount">4</span> connected</span>
+      </div>
+
+      <!-- presence rail -->
+      <div class="flex flex-wrap items-center gap-2 border-b border-hair px-4 sm:px-5 py-3 bg-[#fafafa]">
+        <span class="peer-pill"><span class="peer-swatch" style="background:#635bff"></span>ana</span>
+        <span class="peer-pill"><span class="peer-swatch" style="background:#0ea5a4"></span>kai</span>
+        <span class="peer-pill"><span class="peer-swatch" style="background:#e0851b"></span>sam</span>
+        <span class="peer-pill"><span class="peer-swatch" style="background:#171717"></span>you</span>
+        <span class="ml-auto mono text-[11px] text-ink-muted">192.168.1.0/24</span>
+      </div>
+
+      <!-- canvas surface -->
+      <div class="mc-canvas" id="mcCanvas">
+        <!-- live wiring edge (Plan → Create), drawn by kai -->
+        <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 600 480" preserveAspectRatio="none" aria-hidden="true">
+          <path class="mc-wire drawing" id="mcWire" d="M300,150 C300,210 230,250 230,300" />
+        </svg>
+
+        <!-- node cards (real DISPATCH node types) -->
+        <div class="mc-node" style="left:6%;top:14%;width:172px;" data-cnode>
+          <span class="dot dot-done"></span><span class="nlabel">Investigate</span>
+          <span class="ml-auto mono text-[11px] text-ink-muted">web_search</span>
+        </div>
+        <div class="mc-node is-wiring" style="left:46%;top:24%;width:160px;" data-cnode id="mcPlan">
+          <span class="dot dot-run pulse-run"></span><span class="nlabel">Plan</span>
+          <span class="ml-auto mono text-[11px] text-accent">opus</span>
+        </div>
+        <div class="mc-node is-wiring" style="left:28%;top:58%;width:172px;" data-cnode id="mcCreate">
+          <span class="dot dot-idle"></span><span class="nlabel">Create</span>
+          <span class="ml-auto mono text-[11px] text-ink-muted">draft</span>
+        </div>
+        <div class="mc-node" style="left:66%;top:62%;width:152px;" data-cnode>
+          <span class="dot dot-idle"></span><span class="nlabel">Review</span>
+          <span class="ml-auto mono text-[11px] text-ink-muted">gate</span>
+        </div>
+
+        <!-- inline comment pinned to the Plan node -->
+        <div class="mc-comment" style="left:48%;top:9%;--cc:#0ea5a4;" aria-hidden="true">
+          <span class="mc-comment-tag">kai</span>
+          <span class="mc-comment-body">wiring Plan → Create — swap to gpt-4o?</span>
+        </div>
+
+        <!-- live cursors (static fallback via inline left/top; rAF drives transform) -->
+        <div class="mc-cursor" id="mc-ana" style="left:22%;top:30%;--cc:#635bff;">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+          <span class="mc-tag">ana</span>
+        </div>
+        <div class="mc-cursor" id="mc-kai" style="left:52%;top:30%;--cc:#0ea5a4;">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+          <span class="mc-tag">kai</span>
+        </div>
+        <div class="mc-cursor" id="mc-sam" style="left:40%;top:52%;--cc:#e0851b;">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+          <span class="mc-tag">sam</span>
+        </div>
+        <div class="mc-cursor" id="mc-you" style="left:60%;top:46%;--cc:#171717;">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+          <span class="mc-tag">you</span>
+        </div>
+      </div>
+
+      <!-- footer stat line -->
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-hair px-4 sm:px-5 py-3 bg-white mono text-[12px] text-ink-muted">
+        <span>peers: ana · kai · sam · you</span>
+        <span class="text-hair">·</span>
+        <span>CRDT merge · last-write-wins on style</span>
+        <span class="text-hair">·</span>
+        <span class="text-ink-2 flex items-center gap-2"><span class="dot dot-run pulse-run"></span> syncing</span>
+      </div>
+    </div>
+
+    <!-- SYNC FEED -->
+    <div class="flex flex-col">
+      <div class="flex items-center justify-between border border-hair border-b-0 px-4 h-12 bg-white">
+        <span class="eyebrow">presence stream</span>
+        <span class="mono text-[11px] text-ink-muted">/canvas/ops</span>
+      </div>
+      <div class="mc-feed" id="mcFeed" role="log" aria-label="Live collaboration event stream" aria-live="polite">
+        <!-- seeded rows; JS prepends more -->
+        <div class="mc-feed-row"><span class="peer-swatch" style="background:#0ea5a4"></span><span class="mc-feed-who">kai</span><span class="mc-feed-what">wired Plan → Create</span><span class="mc-feed-t">now</span></div>
+        <div class="mc-feed-row"><span class="peer-swatch" style="background:#0ea5a4"></span><span class="mc-feed-who">kai</span><span class="mc-feed-what">commented on Plan</span><span class="mc-feed-t">2s</span></div>
+        <div class="mc-feed-row"><span class="peer-swatch" style="background:#635bff"></span><span class="mc-feed-who">ana</span><span class="mc-feed-what">moved Investigate</span><span class="mc-feed-t">4s</span></div>
+        <div class="mc-feed-row"><span class="peer-swatch" style="background:#e0851b"></span><span class="mc-feed-who">sam</span><span class="mc-feed-what">set Create model · draft</span><span class="mc-feed-t">7s</span></div>
+        <div class="mc-feed-row"><span class="peer-swatch" style="background:#171717"></span><span class="mc-feed-who">you</span><span class="mc-feed-what">selected Review</span><span class="mc-feed-t">9s</span></div>
+        <div class="mc-feed-row"><span class="peer-swatch" style="background:#635bff"></span><span class="mc-feed-who">ana</span><span class="mc-feed-what">joined · 192.168.1.41</span><span class="mc-feed-t">14s</span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="mt-5 mono text-[12px] text-ink-muted max-w-2xl reveal">
+    Every action is a CRDT op multicast to peers on the subnet — no central server arbitrates.
+  </p>
+</section>
+
+<!-- ============ WHAT IT IS ============ -->
+<section class="border-y border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">what it is</span>
+      <h2 class="h2 mt-3">Real-time multiplayer, kept on your network.</h2>
+      <p class="lead mt-4">Open the same workspace from any machine on your LAN and you edit the exact same graph as everyone else. Edits, wiring, model swaps, and comments land for all peers within a frame or two.</p>
+    </div>
+
+    <div class="mc-bento mt-10 reveal">
+      <div class="mc-tile" style="grid-column:span 4;">
+        <span class="eyebrow">named cursors</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">See who's where.</p>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">Each peer carries a colour and a name tag. Watch ana hover <span class="text-ink-2">Investigate</span> while sam drags <span class="text-ink-2">Create</span> into place — presence is visible, never guessed.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="peer-pill"><span class="peer-swatch" style="background:#635bff"></span>ana</span>
+          <span class="peer-pill"><span class="peer-swatch" style="background:#0ea5a4"></span>kai</span>
+          <span class="peer-pill"><span class="peer-swatch" style="background:#e0851b"></span>sam</span>
+        </div>
+      </div>
+
+      <div class="mc-tile" style="grid-column:span 4;">
+        <span class="eyebrow">inline comments</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Pin a thread to any node.</p>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">Drop a comment on a <span class="text-ink-2">Plan</span>, <span class="text-ink-2">Review</span>, or <span class="text-ink-2">Merge</span> node and it travels with the graph. Reviews happen in place — no pasting node IDs into a chat elsewhere.</p>
+        <div class="mt-4 mc-comment" style="position:relative;left:auto;top:auto;--cc:#0ea5a4;box-shadow:none;">
+          <span class="mc-comment-tag">kai</span>
+          <span class="mc-comment-body">gate this before Deploy?</span>
+        </div>
+      </div>
+
+      <div class="mc-tile" style="grid-column:span 4;">
+        <span class="eyebrow">live wiring</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Build the chain together.</p>
+        <p class="mt-2 text-[13.5px] text-ink-body leading-relaxed">When a teammate draws an edge — <span class="text-ink-2">Parallel</span> fanning out to <span class="text-ink-2">Design</span> and <span class="text-ink-2">Doc</span> — it streams onto your screen as they pull it. Two people can wire opposite ends of one graph at once.</p>
+        <svg class="mt-4 w-full h-[62px]" viewBox="0 0 200 64" fill="none" aria-hidden="true">
+          <rect x="74" y="4" width="52" height="20" stroke="#eaeaea" fill="#fff"/>
+          <text x="100" y="17" text-anchor="middle" font-family="Geist Mono" font-size="9" fill="#171717">Parallel</text>
+          <path d="M88,24 C66,36 50,40 42,54" class="mc-wire drawing"/>
+          <path d="M112,24 C134,36 150,40 158,54" class="mc-wire drawing"/>
+          <rect x="20" y="44" width="44" height="18" stroke="#eaeaea" fill="#fff"/>
+          <rect x="136" y="44" width="44" height="18" stroke="#eaeaea" fill="#fff"/>
+          <text x="42" y="56" text-anchor="middle" font-family="Geist Mono" font-size="8" fill="#595959">Design</text>
+          <text x="158" y="56" text-anchor="middle" font-family="Geist Mono" font-size="8" fill="#595959">Doc</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="max-w-content mx-auto px-6 py-16 md:py-20">
+  <div class="max-w-2xl reveal">
+    <span class="eyebrow">how it works</span>
+    <h2 class="h2 mt-3">Peer-to-peer, over the subnet.</h2>
+    <p class="lead mt-4">No relay, no broker, no SaaS backend. One peer hosts; the rest discover and join over the local network. Edits flow as conflict-free ops, so the graph converges identically everywhere.</p>
+  </div>
+
+  <div class="mc-flow mt-10 reveal">
+    <div class="mc-flow-cell">
+      <span class="mc-flow-k">01 · discover</span>
+      <span class="mc-flow-t">Find peers on the LAN</span>
+      <p class="mc-flow-d">A host advertises the session over mDNS / local discovery. Teammates on the same subnet see it and join — no links to paste, no logins.</p>
+    </div>
+    <div class="mc-flow-cell">
+      <span class="mc-flow-k">02 · sync</span>
+      <span class="mc-flow-t">Snapshot the canvas</span>
+      <p class="mc-flow-d">On join you receive the current graph state — every node (Initialiser → … → Deploy), its model, edges, and pinned comments — in one transfer.</p>
+    </div>
+    <div class="mc-flow-cell">
+      <span class="mc-flow-k">03 · stream</span>
+      <span class="mc-flow-t">Multicast every op</span>
+      <p class="mc-flow-d">Cursor moves, edge-wiring, model swaps and comments become small CRDT ops, broadcast to peers and applied as they arrive.</p>
+    </div>
+    <div class="mc-flow-cell">
+      <span class="mc-flow-k">04 · converge</span>
+      <span class="mc-flow-t">Same graph, everywhere</span>
+      <p class="mc-flow-d">Conflict-free merge means concurrent edits never clobber each other. Drop the network and you keep editing — ops reconcile on reconnect.</p>
+    </div>
+  </div>
+
+  <!-- properties strip -->
+  <div class="mt-6 grid md:grid-cols-2 gap-6 reveal" style="transition-delay:.06s">
+    <div class="border border-hair bg-white p-5 sm:p-6">
+      <span class="eyebrow">session</span>
+      <div class="mt-3">
+        <div class="mc-prop"><span class="k">transport</span><span class="v">LAN multicast · peer-to-peer</span></div>
+        <div class="mc-prop"><span class="k">discovery</span><span class="v">mDNS / local</span></div>
+        <div class="mc-prop"><span class="k">merge</span><span class="v">CRDT · conflict-free</span></div>
+        <div class="mc-prop"><span class="k">presence</span><span class="v">named cursors + comments</span></div>
+        <div class="mc-prop"><span class="k">cloud</span><span class="v">none · nothing leaves the subnet</span></div>
+      </div>
+    </div>
+    <div class="border border-hair bg-white p-5 sm:p-6 flex flex-col">
+      <span class="eyebrow">why it matters</span>
+      <p class="mt-3 text-[14px] text-ink-body leading-relaxed">Designing an agent workflow is a team sport — someone shapes the <span class="text-ink-2">Plan</span>, someone wires <span class="text-ink-2">Investigate → Create → Review</span>, someone gates the <span class="text-ink-2">Deploy</span>. One live canvas beats screen-shares and exported diagrams.</p>
+      <p class="mt-3 text-[14px] text-ink-body leading-relaxed">And because it is local-first, it works in an air-gapped lab, on a plane, or behind the strictest firewall — your prompts, graph, and runs never round-trip to the cloud.</p>
+      <a href="secure-local.html" class="link-arrow mt-auto pt-4 text-[13px]">
+        How local-first security works
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-y border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="flex flex-wrap items-end justify-between gap-4 reveal">
+      <div class="max-w-2xl">
+        <span class="eyebrow">related features</span>
+        <h2 class="h2 mt-3">Pairs well with</h2>
+      </div>
+      <a href="../index.html#features" class="link-arrow text-[14px]">
+        Back to all features
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      </a>
+    </div>
+
+    <div class="rel-grid mt-8 reveal" style="transition-delay:.06s">
+      <a href="secure-local.html" class="rel-card">
+        <div class="flex items-center gap-2"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">local-first</span></div>
+        <h3 class="rel-title">Secure-first / Fully Local</h3>
+        <p class="rel-desc">Self-hosted, no telemetry, no cloud — the substrate that keeps collaboration on your subnet.</p>
+        <span class="rel-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="voice-control.html" class="rel-card">
+        <div class="flex items-center gap-2"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">VoiceOrb</span></div>
+        <h3 class="rel-title">Agentic Voice Control</h3>
+        <p class="rel-desc">Talk to the shared canvas — describe an edit and watch it land for every connected teammate.</p>
+        <span class="rel-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="git-backed-canvas.html" class="rel-card">
+        <div class="flex items-center gap-2"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">versioned</span></div>
+        <h3 class="rel-title">Git-backed Canvas</h3>
+        <p class="rel-desc">Every workflow is a file — commit, diff, and review the graph your team just built together, like code.</p>
+        <span class="rel-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="max-w-content mx-auto px-6 py-16 md:py-20">
+  <div class="cta-panel reveal">
+    <div class="cta-tex" aria-hidden="true"></div>
+    <div class="cta-glow" aria-hidden="true"></div>
+    <div class="cta-rail">
+      <span class="eyebrow">open source · MIT</span>
+      <span class="mono text-[11px] text-ink-muted flex items-center gap-2"><span class="dot dot-run pulse-run"></span> local-first</span>
+    </div>
+    <div class="cta-body">
+      <div class="cta-left">
+        <h2 class="cta-head">Bring the<br>whole team in.</h2>
+        <p class="cta-sub">Clone DISPATCH, open a canvas, and let everyone on your network join the same graph. No accounts, no cloud, no cost.</p>
+        <div class="cta-actions">
+          <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-dark h-11 px-5 text-[15px]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            View on GitHub
+          </a>
+          <a href="../index.html#collab" class="btn btn-ghost h-11 px-5 text-[15px]">See it on the canvas</a>
+        </div>
+        <div class="cta-backed">
+          <span class="eyebrow">backed by</span>
+          <div class="cta-backed-row">
+            <span class="cta-backer">Pyca Ireland</span>
+            <span class="cta-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- mini collab motif -->
+      <div class="cta-chain" aria-hidden="true">
+        <svg class="cta-chain-edges" viewBox="0 0 200 200" preserveAspectRatio="none">
+          <path class="edge active" d="M100,42 L100,74"/>
+          <path class="edge active" d="M100,106 L100,138"/>
+        </svg>
+        <div class="cta-chain-nodes">
+          <div class="node"><span class="dot dot-done"></span><span class="nlabel">Plan</span><span class="ml-auto mono text-[11px] text-ink-muted">ana</span></div>
+          <div class="node is-running"><span class="dot dot-run pulse-run"></span><span class="nlabel">Create</span><span class="ml-auto mono text-[11px] text-accent">kai · wiring</span></div>
+          <div class="node"><span class="dot dot-idle"></span><span class="nlabel">Review</span><span class="ml-auto mono text-[11px] text-ink-muted">sam · gate</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#collab" class="hover:text-ink-2 transition-colors">Collaboration</a></li>
+          <li><a href="../index.html#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ DEMO SCRIPT — bespoke, self-contained ============
+     ONE rAF loop drives all roaming cursors along precomputed Catmull-Rom
+     paths (sampled once). IntersectionObserver gates it; reduced-motion and
+     hidden-tab pause it; the static inline left/top stay as the fallback.
+     A light timer prepends synthetic ops to the presence feed. ----------- -->
+<script>
+(function(){
+  var canvas=document.getElementById('mcCanvas');
+  if(!canvas)return;
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  var cursors=[
+    {el:document.getElementById('mc-ana'),pts:[[22,30],[44,18],[14,16],[40,46],[18,40]],speed:0.052,t:0.0},
+    {el:document.getElementById('mc-kai'),pts:[[52,30],[46,24],[30,52],[40,58],[54,40]],speed:0.044,t:0.30},
+    {el:document.getElementById('mc-sam'),pts:[[40,52],[28,60],[34,30],[58,26],[46,50]],speed:0.060,t:0.60},
+    {el:document.getElementById('mc-you'),pts:[[60,46],[72,64],[66,58],[52,52],[68,48]],speed:0.040,t:0.15}
+  ].filter(function(c){return c.el;});
+  if(!cursors.length)return;
+
+  var nodes=Array.prototype.slice.call(canvas.querySelectorAll('[data-cnode]'));
+
+  function buildTable(pts,samples){
+    var n=pts.length,out=[];
+    function cr(p0,p1,p2,p3,u){
+      var u2=u*u,u3=u2*u;
+      return 0.5*((2*p1)+(-p0+p2)*u+(2*p0-5*p1+4*p2-p3)*u2+(-p0+3*p1-3*p2+p3)*u3);
+    }
+    for(var i=0;i<n;i++){
+      var p0=pts[(i-1+n)%n],p1=pts[i],p2=pts[(i+1)%n],p3=pts[(i+2)%n];
+      for(var s=0;s<samples;s++){
+        var u=s/samples;
+        out.push([cr(p0[0],p1[0],p2[0],p3[0],u),cr(p0[1],p1[1],p2[1],p3[1],u)]);
+      }
+    }
+    return out;
+  }
+  cursors.forEach(function(c){c.table=buildTable(c.pts,36);});
+
+  var nodeSpots=[];
+  function measureNodes(){
+    var cr=canvas.getBoundingClientRect();
+    if(!cr.width||!cr.height){nodeSpots=[];return;}
+    nodeSpots=nodes.map(function(el){
+      var r=el.getBoundingClientRect();
+      return {el:el,x:((r.left+r.width/2)-cr.left)/cr.width*100,y:((r.top+r.height/2)-cr.top)/cr.height*100};
+    });
+  }
+
+  var cw=0,ch=0;
+  function measureSize(){
+    cw=canvas.clientWidth;ch=canvas.clientHeight;
+    cursors.forEach(function(c){c.el.style.left='0';c.el.style.top='0';});
+  }
+
+  var raf=null,running=false,last=0;
+  function frame(now){
+    if(!running)return;
+    if(!last)last=now;
+    var dt=Math.min(0.05,(now-last)/1000);last=now;
+    for(var i=0;i<cursors.length;i++){
+      var c=cursors[i],tbl=c.table,L=tbl.length;
+      c.t+=c.speed*dt; if(c.t>=1)c.t-=1;
+      var f=c.t*L,i0=Math.floor(f)%L,i1=(i0+1)%L,fr=f-Math.floor(f);
+      var a=tbl[i0],b=tbl[i1];
+      var px=(a[0]+(b[0]-a[0])*fr),py=(a[1]+(b[1]-a[1])*fr);
+      c.el.style.transform='translate3d('+(px/100*cw)+'px,'+(py/100*ch)+'px,0)';
+      c.px=px;c.py=py;
+    }
+    if(nodeSpots.length){
+      var sel=null,best=9;
+      for(var j=0;j<cursors.length;j++){
+        var cc=cursors[j];
+        for(var k=0;k<nodeSpots.length;k++){
+          var sp=nodeSpots[k];var d=Math.hypot(cc.px-sp.x,cc.py-sp.y);
+          if(d<best){best=d;sel=sp.el;}
+        }
+      }
+      for(var m=0;m<nodeSpots.length;m++){
+        var el=nodeSpots[m].el;
+        if(!el.classList.contains('is-wiring')) el.classList.toggle('is-selected',el===sel);
+      }
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(running||reduce.matches)return;running=true;last=0;measureSize();measureNodes();raf=requestAnimationFrame(frame);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
+
+  if(!reduce.matches){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)start();else stop();});},{threshold:0.2});
+    io.observe(canvas);
+    document.addEventListener('visibilitychange',function(){if(document.hidden)stop();else if(!reduce.matches)start();});
+    var rt=null;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){if(running){measureSize();measureNodes();}},150);});
+    reduce.addEventListener('change',function(e){if(e.matches)stop();});
+  }
+
+  /* ---- presence feed: prepend synthetic ops while the demo is on-screen ---- */
+  var feed=document.getElementById('mcFeed');
+  if(feed&&!reduce.matches){
+    var peers=[
+      {n:'ana',c:'#635bff'},{n:'kai',c:'#0ea5a4'},{n:'sam',c:'#e0851b'},{n:'you',c:'#171717'}
+    ];
+    var acts=[
+      'moved Plan','wired Create → Review','commented on Review','set Plan model · opus',
+      'selected Investigate','dragged Create','wired Investigate → Plan','pinned a note',
+      'opened Merge','set Create model · gpt-4o','gated Deploy'
+    ];
+    var feedTimer=null,feedOn=false;
+    function emit(){
+      var p=peers[Math.floor(Math.random()*peers.length)];
+      var a=acts[Math.floor(Math.random()*acts.length)];
+      var row=document.createElement('div');
+      row.className='mc-feed-row';
+      row.innerHTML='<span class="peer-swatch" style="background:'+p.c+'"></span>'+
+        '<span class="mc-feed-who">'+p.n+'</span>'+
+        '<span class="mc-feed-what">'+a+'</span>'+
+        '<span class="mc-feed-t">now</span>';
+      feed.insertBefore(row,feed.firstChild);
+      var ts=feed.querySelectorAll('.mc-feed-t');
+      for(var i=1;i<ts.length;i++){ ts[i].textContent=(i*2)+'s'; }
+      while(feed.children.length>8){ feed.removeChild(feed.lastChild); }
+    }
+    var fio=new IntersectionObserver(function(es){es.forEach(function(e){
+      feedOn=e.isIntersecting;
+      if(feedOn&&!feedTimer&&!document.hidden){feedTimer=setInterval(emit,2600);}
+      else if(!feedOn&&feedTimer){clearInterval(feedTimer);feedTimer=null;}
+    });},{threshold:0.2});
+    fio.observe(feed);
+    document.addEventListener('visibilitychange',function(){
+      if(document.hidden&&feedTimer){clearInterval(feedTimer);feedTimer=null;}
+      else if(!document.hidden&&feedOn&&!feedTimer){feedTimer=setInterval(emit,2600);}
+    });
+  }
+
+  /* ---- scroll reveal (IntersectionObserver-gated) ---- */
+  var reveals=document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window && !reduce.matches){
+    var rio=new IntersectionObserver(function(es){es.forEach(function(e){
+      if(e.isIntersecting){e.target.classList.add('in');rio.unobserve(e.target);}
+    });},{threshold:0.12,rootMargin:'0px 0px -8% 0px'});
+    reveals.forEach(function(el){rio.observe(el);});
+  }else{
+    reveals.forEach(function(el){el.classList.add('in');});
+  }
+})();
+</script>
+
+</body>
+</html>

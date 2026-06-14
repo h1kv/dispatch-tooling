@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Agentic Voice Control</title>
+<meta name="description" content="Talk to your canvas. The VoiceOrb listens, thinks, and speaks — describe a change in plain language and DISPATCH edits the graph: add a Review node, rewire an edge, set a model, press Run. Hands-free orchestration." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Three.js ESM importmap (pinned) — VoiceOrb particle field -->
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<style>
+  /* ===== Page-local: voice demo surfaces (square, hairline, on-brand) ===== */
+  .vc-orb-stage{position:relative;min-height:360px;background:#fff;overflow:hidden;}
+  #orbCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  #orbFallback{position:absolute;left:50%;top:50%;width:148px;height:148px;transform:translate(-50%,-50%);
+    background:radial-gradient(circle at 40% 35%, #4c8bff, #635bff 70%);opacity:.85;}
+  .vc-state-badge{position:absolute;left:18px;top:16px;z-index:10;}
+
+  /* transcript log */
+  .vc-log{border:1px solid #eaeaea;background:#fff;}
+  .vc-log-row{display:flex;gap:12px;padding:12px 16px;}
+  .vc-log-row + .vc-log-row{border-top:1px solid #eaeaea;}
+  .vc-role{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;
+    width:70px;flex:none;padding-top:2px;}
+  .vc-role-user{color:#737373;}
+  .vc-role-dispatch{color:#635bff;}
+  .vc-line{font-size:13.5px;line-height:1.6;color:#171717;min-height:1.6em;margin:0;}
+  .vc-line-d{color:#595959;}
+
+  /* live mini-canvas the voice command mutates */
+  .vc-canvas{position:relative;overflow:hidden;
+    background-color:#fff;
+    background-image:radial-gradient(#e6e6e6 1.1px, transparent 1.1px);
+    background-size:18px 18px;background-position:-1px -1px;}
+  .vc-node{position:absolute;background:#fff;border:1px solid #eaeaea;padding:9px 11px;
+    display:flex;align-items:center;gap:8px;font-size:13px;width:200px;max-width:calc(100% - 32px);
+    box-shadow:0 1px 2px rgba(10,10,10,.03);
+    transition:border-color .3s var(--ease-out),box-shadow .3s var(--ease-out),opacity .4s var(--ease-out),transform .4s var(--ease-out);}
+  .vc-node .nlabel{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+  .vc-node.is-ghost{opacity:0;transform:translateY(10px);border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+  .vc-node.is-ghost.shown{opacity:1;transform:none;}
+  .vc-node.is-running{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+  .vc-node.is-done{border-color:#16a34a55;}
+  .vc-edge{stroke:#d4d4d4;stroke-width:1.5;fill:none;stroke-linecap:round;}
+  .vc-edge.draw{stroke-dasharray:200;stroke-dashoffset:200;transition:stroke-dashoffset .5s var(--ease-out),stroke .3s;}
+  .vc-edge.draw.shown{stroke-dashoffset:0;}
+  .vc-edge.active{stroke:#635bff;stroke-dasharray:6 6;animation:march 1s linear infinite;}
+
+  /* command chip buttons (press-to-talk presets) */
+  .vc-cmd{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+    border:1px solid #eaeaea;background:#fff;color:#171717;padding:11px 12px;min-height:46px;
+    font-size:13px;line-height:1.35;cursor:pointer;
+    transition:border-color .15s var(--ease-hover),background .15s var(--ease-hover),box-shadow .15s var(--ease-hover);}
+  .vc-cmd:hover{border-color:#d6d6d6;background:#fafafa;}
+  .vc-cmd.is-current{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.08);background:#fff;}
+  .vc-cmd .vc-cmd-ico{width:18px;height:18px;flex:none;display:grid;place-items:center;color:#635bff;}
+  .vc-cmd .vc-cmd-quote{flex:1;min-width:0;}
+  .vc-cmd .vc-cmd-key{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#737373;
+    border:1px solid #eaeaea;padding:2px 6px;flex:none;}
+
+  /* mic / talk button */
+  .vc-mic{display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 18px;
+    background:#0a0a0a;color:#fff;font-size:14px;font-weight:500;letter-spacing:-0.01em;cursor:pointer;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.10);
+    transition:background .15s var(--ease-hover),transform .15s var(--ease-hover);}
+  .vc-mic:hover{background:#262626;transform:translateY(-1px);}
+  .vc-mic:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+  .vc-mic .vc-mic-ring{position:relative;width:9px;height:9px;background:#635bff;border-radius:9999px !important;flex:none;}
+  .vc-mic.is-live .vc-mic-ring{animation:pulseRun 1.4s var(--ease-hover) infinite;}
+
+  /* state pipeline strip */
+  .vc-pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  .vc-pipe-step{background:#fff;padding:11px 12px;display:flex;flex-direction:column;gap:6px;transition:background .25s;}
+  .vc-pipe-step.on{background:linear-gradient(180deg, rgba(99,91,255,0.05), #fff 70%);}
+  .vc-pipe-cap{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#737373;
+    display:flex;align-items:center;gap:7px;}
+  .vc-pipe-step.on .vc-pipe-cap{color:#171717;}
+  .vc-pipe-dot{width:7px;height:7px;flex:none;background:#cfcfcf;border-radius:9999px !important;transition:background .25s;}
+  .vc-pipe-step.on .vc-pipe-dot{background:#635bff;}
+  .vc-pipe-sub{font-size:11.5px;line-height:1.45;color:#595959;}
+
+  /* bento grid for "what it is" */
+  .vc-bento{display:grid;grid-template-columns:repeat(12,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  .vc-cell{background:#fff;padding:24px;position:relative;}
+  @media (max-width:820px){ .vc-bento{grid-template-columns:1fr;} .vc-cell{grid-column:span 1 !important;} }
+
+  /* intents table */
+  .vc-intent{display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:1px solid #eaeaea;}
+  .vc-intent:last-child{border-bottom:0;}
+  .vc-intent-verb{font-family:'Geist Mono',monospace;font-size:12px;color:#635bff;width:96px;flex:none;letter-spacing:0.02em;}
+  .vc-intent-say{font-size:13.5px;color:#171717;line-height:1.5;}
+  .vc-intent-do{font-size:12.5px;color:#737373;line-height:1.5;margin-top:2px;}
+
+  /* related features */
+  .vc-rel-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;}
+  @media (max-width:760px){ .vc-rel-grid{grid-template-columns:1fr;} }
+
+  @media (prefers-reduced-motion: reduce){
+    .vc-mic.is-live .vc-mic-ring{animation:none;}
+    .vc-edge.active{animation:none;stroke-dasharray:none;}
+  }
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem" aria-current="page"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close aria-current="page"><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<script>
+/* Nav: scroll state + Features mega-menu + mobile sheet + accordion (inline; feature pages don't load app.js) */
+(function(){
+  var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+  // nav glass on scroll
+  var nav=document.getElementById('nav');
+  if(nav){
+    var onScroll=function(){ nav.classList.toggle('nav-scrolled', window.scrollY>8); };
+    onScroll(); window.addEventListener('scroll',onScroll,{passive:true});
+  }
+
+  /* Desktop Features mega-menu (hover-intent on pointer devices, click everywhere) */
+  var wrap=document.getElementById('featMenuWrap');
+  var btn=document.getElementById('featMenuBtn');
+  var menuEl=document.getElementById('featMenu');
+  if(wrap&&btn&&menuEl){
+    var openTimer=null, closeTimer=null;
+    var isOpen=function(){ return wrap.classList.contains('is-open'); };
+    var open=function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menuEl.removeAttribute('hidden');
+    };
+    var close=function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menuEl.setAttribute('hidden','');
+    };
+    btn.addEventListener('click',function(e){ e.stopPropagation(); isOpen()?close():open(); });
+    if(!isTouch){
+      wrap.addEventListener('pointerenter',function(){ clearTimeout(closeTimer); openTimer=setTimeout(open,60); });
+      wrap.addEventListener('pointerleave',function(){ clearTimeout(openTimer); closeTimer=setTimeout(close,140); });
+    }
+    document.addEventListener('click',function(e){ if(isOpen()&&!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&isOpen()){ close(); btn.focus(); } });
+    menuEl.addEventListener('click',function(e){ if(e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle */
+  var toggle=document.getElementById('navToggle');
+  var sheet=document.getElementById('mobileMenu');
+  var openIcon=document.getElementById('navOpenIcon');
+  var closeIcon=document.getElementById('navCloseIcon');
+  if(toggle&&sheet){
+    var setOpen=function(o){
+      sheet.classList.toggle('hidden',!o);
+      toggle.setAttribute('aria-expanded',String(o));
+      toggle.setAttribute('aria-label',o?'Close menu':'Open menu');
+      if(openIcon) openIcon.classList.toggle('hidden',o);
+      if(closeIcon) closeIcon.classList.toggle('hidden',!o);
+    };
+    toggle.addEventListener('click',function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click',function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&!sheet.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize',function(){
+      if(window.innerWidth>=768&&!sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    /* Mobile Features accordion */
+    var accBtn=sheet.querySelector('.nav-acc-btn');
+    var accPanel=document.getElementById('navAccPanel');
+    if(accBtn&&accPanel){
+      accBtn.addEventListener('click',function(){
+        var expanded=accBtn.getAttribute('aria-expanded')==='true';
+        accBtn.setAttribute('aria-expanded',String(!expanded));
+        accPanel.toggleAttribute('hidden',expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden border-b border-hair">
+  <div class="hero-sheen" aria-hidden="true"></div>
+  <div class="relative max-w-content mx-auto px-6 pt-16 pb-14 md:pt-20 md:pb-16">
+    <a href="../index.html#features" class="link-arrow text-[13px] reveal" style="--tw-rotate:180deg">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      All features
+    </a>
+
+    <div class="max-w-3xl mt-6">
+      <span class="eyebrow reveal">interface + control</span>
+      <h1 class="h1 mt-4 reveal" style="transition-delay:.05s">Agentic Voice Control.</h1>
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        Speak an edit, not a prompt. The VoiceOrb parses plain language into a graph operation and
+        applies it to the canvas you're looking at — add a <span class="text-ink-2">Review</span> node,
+        rewire an edge, set a model, press Run. Hands&#8209;free orchestration.
+      </p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <!-- STATUS CHIP — Active = green dot -->
+        <span class="feat-status feat-status-active"><span class="sdot"></span>Active</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2">
+          <span class="dot dot-run pulse-run"></span> VoiceOrb · listen → plan → apply
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT IS — bento ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">what it is</span>
+      <h2 class="h2 mt-3">Your voice is a graph editor.</h2>
+      <p class="lead mt-4">
+        The VoiceOrb doesn't just transcribe — it resolves your words into a concrete graph operation and
+        applies it in place, the same mutation you'd make by hand.
+      </p>
+    </div>
+
+    <div class="vc-bento mt-10 reveal">
+      <div class="vc-cell" style="grid-column:span 5;">
+        <span class="eyebrow">not a chatbot</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">It mutates the canvas, not a chat log.</p>
+        <p class="mt-3 text-[13.5px] leading-relaxed text-ink-body">
+          Nodes resolve by name. "After Investigate" finds the real node, "wire it" becomes a real edge.
+          Every change is undoable like any edit — and ambiguity is asked back, not guessed.
+        </p>
+      </div>
+
+      <div class="vc-cell" style="grid-column:span 7;">
+        <span class="eyebrow">spoken intent → graph op</span>
+        <div class="mt-4">
+          <div class="vc-intent">
+            <span class="vc-intent-verb">add.node</span>
+            <div>
+              <div class="vc-intent-say">"Drop a Plan node before Create."</div>
+              <div class="vc-intent-do">inserts Plan, rewires Investigate → Plan → Create</div>
+            </div>
+          </div>
+          <div class="vc-intent">
+            <span class="vc-intent-verb">rewire</span>
+            <div>
+              <div class="vc-intent-say">"Send Design and Doc into a Merge."</div>
+              <div class="vc-intent-do">fans Design + Doc into a Merge node, joins downstream</div>
+            </div>
+          </div>
+          <div class="vc-intent">
+            <span class="vc-intent-verb">set.model</span>
+            <div>
+              <div class="vc-intent-say">"Run Review on Claude Opus."</div>
+              <div class="vc-intent-do">hotswaps the Review node's provider + model in place</div>
+            </div>
+          </div>
+          <div class="vc-intent">
+            <span class="vc-intent-verb">run</span>
+            <div>
+              <div class="vc-intent-say">"Run from the Initialiser."</div>
+              <div class="vc-intent-do">triggers the chain; output and state stream downstream</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO ============ -->
+<section id="demo" class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">try it</span>
+      <h2 class="h2 mt-3">Speak a command. Watch the graph change.</h2>
+      <p class="lead mt-4">
+        Press <span class="mono text-[15px] text-ink-2">Talk</span> or pick a phrase. The orb runs the full
+        loop — listen, plan, apply, speak — on the live mini-canvas at right.
+      </p>
+    </div>
+
+    <div class="mt-10 border border-hair bg-hair grid lg:grid-cols-2 gap-px reveal">
+
+      <!-- LEFT: ORB + controls -->
+      <div class="bg-white flex flex-col">
+        <div class="vc-orb-stage" id="orbStage">
+          <canvas id="orbCanvas" aria-hidden="true"></canvas>
+          <div id="orbFallback" class="hidden" aria-hidden="true"></div>
+          <span class="vc-state-badge badge" id="orbBadge"><span class="w-1.5 h-1.5 is-round bg-ink-muted" id="orbBadgeDot"></span> <span id="orbBadgeLabel">idle</span></span>
+        </div>
+
+        <p class="sr-only" id="orbStatus" aria-live="polite">VoiceOrb state: idle — a gentle breathing sphere.</p>
+
+        <!-- state pipeline -->
+        <div class="px-6 pt-6">
+          <div class="vc-pipe" id="vcPipe" aria-hidden="true">
+            <div class="vc-pipe-step" data-step="listening">
+              <span class="vc-pipe-cap"><span class="vc-pipe-dot"></span>listen</span>
+              <span class="vc-pipe-sub">captures speech → text</span>
+            </div>
+            <div class="vc-pipe-step" data-step="thinking">
+              <span class="vc-pipe-cap"><span class="vc-pipe-dot"></span>plan</span>
+              <span class="vc-pipe-sub">parses intent → graph op</span>
+            </div>
+            <div class="vc-pipe-step" data-step="applying">
+              <span class="vc-pipe-cap"><span class="vc-pipe-dot"></span>apply</span>
+              <span class="vc-pipe-sub">mutates the canvas</span>
+            </div>
+            <div class="vc-pipe-step" data-step="speaking">
+              <span class="vc-pipe-cap"><span class="vc-pipe-dot"></span>speak</span>
+              <span class="vc-pipe-sub">confirms aloud</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- talk + preset phrases -->
+        <div class="px-6 py-6 mt-auto">
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="vcTalk" class="vc-mic" type="button" aria-label="Talk to the canvas">
+              <span class="vc-mic-ring" aria-hidden="true"></span>
+              <span id="vcTalkLabel">Talk</span>
+            </button>
+            <span class="mono text-[11px] text-ink-muted">or pick a phrase →</span>
+          </div>
+
+          <div class="mt-4 grid gap-2" id="vcCmds" role="group" aria-label="Voice command presets">
+            <button class="vc-cmd" type="button" data-cmd="0">
+              <span class="vc-cmd-ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 2v10M2 7h10"/></svg></span>
+              <span class="vc-cmd-quote">"Add a Review node after Investigate and wire it."</span>
+              <span class="vc-cmd-key">add</span>
+            </button>
+            <button class="vc-cmd" type="button" data-cmd="1">
+              <span class="vc-cmd-ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h6M2 10h6M11 4v6M8 7h3"/></svg></span>
+              <span class="vc-cmd-quote">"Set the Review node to Claude Opus."</span>
+              <span class="vc-cmd-key">model</span>
+            </button>
+            <button class="vc-cmd" type="button" data-cmd="2">
+              <span class="vc-cmd-ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2l7 5-7 5V2z"/></svg></span>
+              <span class="vc-cmd-quote">"Run the chain from the Initialiser."</span>
+              <span class="vc-cmd-key">run</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: transcript + live canvas -->
+      <div class="bg-white p-6 flex flex-col">
+        <span class="eyebrow">transcript</span>
+        <div class="vc-log mt-4" role="log" aria-label="Voice transcript">
+          <div class="vc-log-row">
+            <span class="vc-role vc-role-user">user</span>
+            <p class="vc-line"><span id="vcUser"></span><span class="caret" id="vcUserCaret" style="opacity:0"></span></p>
+          </div>
+          <div class="vc-log-row">
+            <span class="vc-role vc-role-dispatch">dispatch</span>
+            <p class="vc-line vc-line-d" id="vcReply">Press Talk, or pick a phrase, to give the canvas an instruction.</p>
+          </div>
+        </div>
+
+        <!-- the canvas the voice command edits -->
+        <div class="mt-5 flex items-center justify-between">
+          <span class="eyebrow">live canvas</span>
+          <span class="mono text-[11px] text-ink-muted flex items-center gap-2" id="vcCanvasStatus"><span class="dot dot-idle"></span> ready</span>
+        </div>
+
+        <div class="vc-canvas mt-3 flex-1 border border-hair" id="vcCanvas" style="min-height:280px;">
+          <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 320 300" preserveAspectRatio="none" id="vcEdges">
+            <!-- Initialiser -> Investigate (persistent) -->
+            <path class="vc-edge" d="M62,52 L62,96" id="ve-base1"></path>
+            <!-- Investigate -> Review (drawn when added) -->
+            <path class="vc-edge draw" d="M62,138 L62,182" id="ve-add"></path>
+          </svg>
+
+          <!-- Initialiser -->
+          <div class="vc-node is-done" id="vn-init" style="left:16px;top:14px;">
+            <span class="dot dot-done"></span><span class="nlabel">Initialiser</span>
+            <span class="ml-auto mono text-[11px] text-ink-muted">trigger</span>
+          </div>
+          <!-- Investigate -->
+          <div class="vc-node is-done" id="vn-inv" style="left:16px;top:100px;">
+            <span class="dot dot-done"></span><span class="nlabel">Investigate</span>
+            <span class="ml-auto mono text-[11px] text-ink-muted">web_search</span>
+          </div>
+          <!-- Review (ghost — appears on the "add" command) -->
+          <div class="vc-node is-ghost" id="vn-rev" style="left:16px;top:186px;">
+            <span class="dot dot-run" id="vn-rev-dot"></span><span class="nlabel">Review</span>
+            <span class="ml-auto mono text-[11px] text-accent" id="vn-rev-meta">+ added</span>
+          </div>
+        </div>
+
+        <a href="../index.html#features" class="link-arrow mt-5 text-[13px]">
+          Back to all features
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <p class="mt-4 mono text-[11px] text-ink-muted reveal">
+      Demo plays a scripted command loop — local voice runs against your real graph. Reduced-motion safe; the orb pauses when off-screen.
+    </p>
+  </div>
+</section>
+
+<!-- ============ WHY IT MATTERS ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-14 items-start">
+      <div class="reveal">
+        <span class="eyebrow">why it matters</span>
+        <h2 class="h2 mt-3">Orchestrate without leaving the work.</h2>
+        <p class="lead mt-4">
+          Building a graph by mouse is fiddly — drag a node, find the handle, drag the edge, open the model
+          picker. Voice collapses that into a sentence. You stay zoomed in on the run while the structure
+          changes around it.
+        </p>
+      </div>
+
+      <div class="reveal" style="transition-delay:.06s">
+        <div class="border border-hair bg-white">
+          <div class="flex items-center justify-between border-b border-hair px-5 h-11">
+            <span class="eyebrow">hands-free, in practice</span>
+            <span class="mono text-[12px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> local</span>
+          </div>
+          <div class="p-5 sm:p-6 grid gap-4">
+            <div class="flex gap-3">
+              <span class="dot dot-done mt-1.5"></span>
+              <p class="text-[13.5px] leading-relaxed text-ink-body"><span class="text-ink-2 font-medium">Mid-run edits.</span> Add a <span class="mono text-[12px] text-ink-2">Review</span> gate the moment a node looks risky — without pausing to hunt for the toolbar.</p>
+            </div>
+            <div class="flex gap-3">
+              <span class="dot dot-done mt-1.5"></span>
+              <p class="text-[13.5px] leading-relaxed text-ink-body"><span class="text-ink-2 font-medium">Big restructures, fast.</span> "Fan Design and Doc into a Parallel, then Merge" wires four nodes in one breath.</p>
+            </div>
+            <div class="flex gap-3">
+              <span class="dot dot-done mt-1.5"></span>
+              <p class="text-[13.5px] leading-relaxed text-ink-body"><span class="text-ink-2 font-medium">Accessible by default.</span> The whole canvas is drivable without a mouse — every state is announced via <span class="mono text-[12px] text-ink-2">aria-live</span>.</p>
+            </div>
+            <div class="flex gap-3">
+              <span class="dot dot-done mt-1.5"></span>
+              <p class="text-[13.5px] leading-relaxed text-ink-body"><span class="text-ink-2 font-medium">Stays private.</span> Transcription can run fully local — speech never has to leave your machine.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">related features</span>
+      <h2 class="h2 mt-3">Pairs well with</h2>
+    </div>
+
+    <div class="vc-rel-grid mt-10 reveal">
+      <a href="./model-hotswap.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+        <h3 class="feat-title">Model Hotswapping</h3>
+        <p class="feat-desc">"Run Review on Opus" — voice sets the provider + model on any node, live.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./terminal-cli.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">CLI</span></div>
+        <h3 class="feat-title">Inbuilt Terminal</h3>
+        <p class="feat-desc">Say "run" — or type it. The same commands the orb issues, in a real CLI.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./multiplayer-collab.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">LAN</span></div>
+        <h3 class="feat-title">Local-network Collaboration</h3>
+        <p class="feat-desc">Voice-driven edits stream to every teammate's cursor in real time.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-8 text-[14px] reveal">
+      Back to all features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#voice" class="hover:text-ink-2 transition-colors">Voice control</a></li>
+          <li><a href="../index.html#deploy" class="hover:text-ink-2 transition-colors">Pod deployments</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ REVEAL OBSERVER ============ -->
+<script>
+(function(){
+  var els=[].slice.call(document.querySelectorAll('.reveal'));
+  if(!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    els.forEach(function(e){e.classList.add('in');}); return;
+  }
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+  },{threshold:0.12});
+  els.forEach(function(e){io.observe(e);});
+})();
+</script>
+
+<!-- ============ VOICE DEMO (scripted command loop, drives the canvas) ============ -->
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- elements ----
+  var talkBtn=document.getElementById('vcTalk');
+  var talkLabel=document.getElementById('vcTalkLabel');
+  var cmdWrap=document.getElementById('vcCmds');
+  var cmdBtns=[].slice.call(cmdWrap.querySelectorAll('.vc-cmd'));
+  var userEl=document.getElementById('vcUser');
+  var userCaret=document.getElementById('vcUserCaret');
+  var replyEl=document.getElementById('vcReply');
+  var badge=document.getElementById('orbBadge');
+  var badgeDot=document.getElementById('orbBadgeDot');
+  var badgeLabel=document.getElementById('orbBadgeLabel');
+  var statusEl=document.getElementById('orbStatus');
+  var pipe=document.getElementById('vcPipe');
+  var pipeSteps={};
+  [].slice.call(pipe.querySelectorAll('.vc-pipe-step')).forEach(function(s){ pipeSteps[s.dataset.step]=s; });
+  var canvasStatus=document.getElementById('vcCanvasStatus');
+
+  // canvas nodes/edges
+  var revNode=document.getElementById('vn-rev');
+  var revDot=document.getElementById('vn-rev-dot');
+  var revMeta=document.getElementById('vn-rev-meta');
+  var addEdge=document.getElementById('ve-add');
+  var initNode=document.getElementById('vn-init');
+  var invNode=document.getElementById('vn-inv');
+  var baseEdge=document.getElementById('ve-base1');
+
+  var STATE_COLORS={ idle:'#737373', listening:'#635bff', thinking:'#f59e0b', applying:'#635bff', speaking:'#16a34a' };
+  var orbState='idle';
+
+  // ---- command script ----
+  var COMMANDS=[
+    {
+      say:'Add a Review node after Investigate and wire it.',
+      reply:'Added a Review node after Investigate and wired the edge.',
+      apply:function(){
+        revNode.classList.add('shown');
+        addEdge.classList.add('shown');
+        revMeta.textContent='+ added';
+        revDot.className='dot dot-run';
+        setCanvasStatus('run','edited');
+      }
+    },
+    {
+      say:'Set the Review node to Claude Opus.',
+      reply:'Set the Review node to Anthropic · claude-opus.',
+      apply:function(){
+        // ensure review exists first
+        revNode.classList.add('shown'); addEdge.classList.add('shown');
+        revMeta.textContent='claude-opus';
+        revMeta.classList.remove('text-accent'); revMeta.classList.add('text-ink-2');
+        setCanvasStatus('run','model set');
+      }
+    },
+    {
+      say:'Run the chain from the Initialiser.',
+      reply:'Running — Initialiser → Investigate → Review. Output is streaming downstream.',
+      apply:function(){
+        revNode.classList.add('shown'); addEdge.classList.add('shown');
+        baseEdge.classList.add('active');
+        addEdge.classList.add('active');
+        revNode.classList.remove('is-ghost'); revNode.classList.add('is-running');
+        revDot.className='dot dot-run pulse-run';
+        setCanvasStatus('run','running');
+        // settle to done after the run "completes"
+        clearTimeout(runTimer);
+        runTimer=setTimeout(function(){
+          baseEdge.classList.remove('active'); addEdge.classList.remove('active');
+          revNode.classList.remove('is-running'); revNode.classList.add('is-done');
+          revDot.className='dot dot-done';
+          setCanvasStatus('done','done');
+        }, reduce?0:2200);
+      }
+    }
+  ];
+  var runTimer=null;
+
+  function setCanvasStatus(kind,label){
+    canvasStatus.innerHTML='<span class="dot dot-'+kind+'"></span> '+label;
+  }
+
+  function setState(s,srText){
+    orbState=s;
+    badgeDot.style.background=STATE_COLORS[s]||'#737373';
+    badgeLabel.textContent=(s==='applying'?'applying':s);
+    statusEl.textContent='VoiceOrb state: '+s+(srText?' — '+srText:'');
+    // pipeline highlight
+    Object.keys(pipeSteps).forEach(function(k){ pipeSteps[k].classList.toggle('on', k===s); });
+    if(orbAPI) orbAPI.setState(s);
+  }
+
+  // typewriter for the user line
+  var typing=null;
+  function typeUser(text, done){
+    clearInterval(typing);
+    userEl.textContent=''; userCaret.style.opacity='1';
+    if(reduce){ userEl.textContent=text; userCaret.style.opacity='0'; done&&done(); return; }
+    var i=0;
+    typing=setInterval(function(){
+      userEl.textContent=text.slice(0,++i);
+      if(i>=text.length){ clearInterval(typing); userCaret.style.opacity='0'; done&&done(); }
+    }, 26);
+  }
+
+  var running=false, idleResetTimer=null;
+  function delay(ms){ return new Promise(function(r){ setTimeout(r, reduce?Math.min(ms,120):ms); }); }
+
+  function highlight(idx){
+    cmdBtns.forEach(function(b,i){ b.classList.toggle('is-current', i===idx); });
+  }
+
+  async function runCommand(idx){
+    if(running) return;
+    running=true;
+    clearTimeout(idleResetTimer);
+    talkBtn.disabled=true; talkBtn.classList.add('is-live');
+    talkLabel.textContent='Listening…';
+    highlight(idx);
+    var cmd=COMMANDS[idx];
+
+    // 1) LISTEN — type the transcript
+    setState('listening','capturing speech');
+    await delay(250);
+    await new Promise(function(res){ typeUser(cmd.say, res); });
+    await delay(reduce?60:450);
+
+    // 2) THINK — resolve intent → graph op
+    talkLabel.textContent='Thinking…';
+    setState('thinking','parsing intent into a graph operation');
+    replyEl.textContent='…';
+    await delay(reduce?80:900);
+
+    // 3) APPLY — mutate the canvas
+    setState('applying','applying the edit to the canvas');
+    cmd.apply();
+    await delay(reduce?80:650);
+
+    // 4) SPEAK — confirm
+    talkLabel.textContent='Speaking…';
+    setState('speaking','confirming the change');
+    replyEl.textContent=cmd.reply;
+    await delay(reduce?80:1200);
+
+    // back to idle
+    setState('idle','a gentle breathing sphere');
+    talkLabel.textContent='Talk';
+    talkBtn.disabled=false; talkBtn.classList.remove('is-live');
+    highlight(-1);
+    running=false;
+  }
+
+  // wire presets
+  cmdBtns.forEach(function(b){
+    b.addEventListener('click',function(){ runCommand(parseInt(b.dataset.cmd,10)); });
+  });
+  // Talk button cycles through the script
+  var cursor=0;
+  talkBtn.addEventListener('click',function(){
+    runCommand(cursor % COMMANDS.length);
+    cursor++;
+  });
+
+  // ============ VoiceOrb (Three.js particle field) with 2D fallback ============
+  var orbAPI=null;
+  var orbStage=document.getElementById('orbStage');
+  var canvas=document.getElementById('orbCanvas');
+  var fallback=document.getElementById('orbFallback');
+
+  function useFallback(){
+    canvas.style.display='none';
+    fallback.classList.remove('hidden');
+    orbAPI={ setState:function(s){
+      var c=STATE_COLORS[s]||'#635bff';
+      fallback.style.background='radial-gradient(circle at 40% 35%, #8fb4ff, '+c+' 72%)';
+      fallback.style.opacity = (s==='idle')?'.8':'.95';
+    }};
+  }
+
+  function initWebGL(){
+    import('three').then(function(THREE){
+      try{
+        var renderer=new THREE.WebGLRenderer({canvas:canvas, antialias:true, alpha:true, powerPreference:'low-power'});
+        renderer.setClearColor(0x000000,0);
+        var dpr=Math.min(window.devicePixelRatio||1, 2);
+        renderer.setPixelRatio(dpr);
+
+        var scene=new THREE.Scene();
+        var cam=new THREE.PerspectiveCamera(45,1,0.1,100);
+        cam.position.z=3.4;
+
+        // particle sphere
+        var N=1400;
+        var pos=new Float32Array(N*3);
+        var base=new Float32Array(N*3);
+        for(var i=0;i<N;i++){
+          var u=Math.random(), v=Math.random();
+          var theta=2*Math.PI*u, phi=Math.acos(2*v-1);
+          var r=1.0;
+          var x=r*Math.sin(phi)*Math.cos(theta);
+          var y=r*Math.sin(phi)*Math.sin(theta);
+          var z=r*Math.cos(phi);
+          base[i*3]=x; base[i*3+1]=y; base[i*3+2]=z;
+          pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z;
+        }
+        var geo=new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+        var mat=new THREE.PointsMaterial({ color:0x635bff, size:0.028, transparent:true, opacity:0.9, depthWrite:false });
+        var pts=new THREE.Points(geo,mat);
+        scene.add(pts);
+
+        var core=new THREE.Mesh(
+          new THREE.SphereGeometry(0.62,32,32),
+          new THREE.MeshBasicMaterial({ color:0x635bff, transparent:true, opacity:0.10 })
+        );
+        scene.add(core);
+
+        function resize(){
+          var w=orbStage.clientWidth, h=orbStage.clientHeight;
+          renderer.setSize(w,h,false);
+          cam.aspect=w/h; cam.updateProjectionMatrix();
+        }
+        resize();
+        window.addEventListener('resize',resize);
+
+        // state → motion params
+        var targets={
+          idle:      { amp:0.04, freq:1.4, spin:0.0016, color:0x635bff, size:0.026 },
+          listening: { amp:0.10, freq:2.2, spin:0.0030, color:0x4c8bff, size:0.030 },
+          thinking:  { amp:0.20, freq:5.0, spin:0.0075, color:0xf59e0b, size:0.030 },
+          applying:  { amp:0.14, freq:3.4, spin:0.0050, color:0x635bff, size:0.032 },
+          speaking:  { amp:0.13, freq:2.0, spin:0.0026, color:0x16a34a, size:0.034 }
+        };
+        var cur={ amp:0.04, freq:1.4, spin:0.0016, color:new THREE.Color(0x635bff), size:0.026 };
+        var tgt=Object.assign({}, targets.idle, { color:new THREE.Color(targets.idle.color) });
+
+        orbAPI={ setState:function(s){
+          var t=targets[s]||targets.idle;
+          tgt.amp=t.amp; tgt.freq=t.freq; tgt.spin=t.spin; tgt.size=t.size;
+          tgt.color=new THREE.Color(t.color);
+        }};
+
+        var posAttr=geo.attributes.position;
+        var clock=new THREE.Clock();
+        var visible=true, running2=true, raf=null;
+
+        function frame(){
+          if(!running2){ return; }
+          raf=requestAnimationFrame(frame);
+          var t=clock.getElapsedTime();
+          // ease params
+          cur.amp += (tgt.amp-cur.amp)*0.06;
+          cur.freq += (tgt.freq-cur.freq)*0.06;
+          cur.spin += (tgt.spin-cur.spin)*0.06;
+          cur.size += (tgt.size-cur.size)*0.06;
+          cur.color.lerp(tgt.color, 0.06);
+          mat.color.copy(cur.color);
+          core.material.color.copy(cur.color);
+          mat.size=cur.size;
+
+          var a=posAttr.array;
+          for(var i=0;i<N;i++){
+            var bx=base[i*3], by=base[i*3+1], bz=base[i*3+2];
+            var n=Math.sin(bx*cur.freq + t*1.6) * Math.cos(by*cur.freq + t*1.3) * Math.sin(bz*cur.freq + t*1.1);
+            var d=1 + n*cur.amp;
+            a[i*3]=bx*d; a[i*3+1]=by*d; a[i*3+2]=bz*d;
+          }
+          posAttr.needsUpdate=true;
+          pts.rotation.y += cur.spin; pts.rotation.x += cur.spin*0.4;
+          core.rotation.y = pts.rotation.y;
+          renderer.render(scene,cam);
+        }
+        function start(){ if(!running2){ running2=true; clock.start(); frame(); } }
+        function stop(){ running2=false; if(raf) cancelAnimationFrame(raf); raf=null; }
+
+        if(reduce){
+          // single static render, no animation loop
+          renderer.render(scene,cam);
+        } else {
+          frame();
+          // pause when off-screen
+          if('IntersectionObserver' in window){
+            new IntersectionObserver(function(es){
+              es.forEach(function(e){ if(e.isIntersecting){ start(); } else { stop(); } });
+            },{threshold:0.05}).observe(orbStage);
+          }
+          // pause when tab hidden
+          document.addEventListener('visibilitychange',function(){
+            if(document.hidden) stop(); else if(isOnScreen()) start();
+          });
+          function isOnScreen(){
+            var r=orbStage.getBoundingClientRect();
+            return r.bottom>0 && r.top<window.innerHeight;
+          }
+        }
+        setState('idle','a gentle breathing sphere');
+      }catch(err){ useFallback(); }
+    }).catch(function(){ useFallback(); });
+  }
+
+  // feature-detect WebGL
+  (function(){
+    var ok=false;
+    try{
+      var c=document.createElement('canvas');
+      ok=!!(window.WebGLRenderingContext && (c.getContext('webgl')||c.getContext('experimental-webgl')));
+    }catch(e){ ok=false; }
+    if(ok) initWebGL(); else useFallback();
+    // ensure idle state pushed once API exists
+    setTimeout(function(){ if(orbAPI){ orbAPI.setState('idle'); } }, 60);
+  })();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — Canvas Planning</title>
+<meta name="description" content="Plan the work before you build it. Shape goals, phases, milestones, and risks on a planning canvas, then compile the plan into a runnable DISPATCH chain — Plan, Investigate, Design, Create, Review, Deploy." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="../styles.css" />
+
+<!-- Page-local styles for the planning demo (square, hairline, on-brand) -->
+<style>
+  /* planning stage: dotted canvas surface, same motif as the landing */
+  .plan-stage{
+    position:relative;overflow:hidden;
+    background-color:#fff;
+    background-image:radial-gradient(#e2e2e2 1.1px, transparent 1.1px);
+    background-size:20px 20px;background-position:-1px -1px;
+  }
+  /* a planning card sitting on the canvas */
+  .plan-card{position:relative;background:#fff;border:1px solid #eaeaea;padding:11px 12px;
+    transition:border-color .25s var(--ease-out),box-shadow .25s var(--ease-out),opacity .35s var(--ease-out),transform .35s var(--ease-out);}
+  .plan-card .plabel{font-family:'Geist Mono',monospace;font-size:12px;color:#171717;letter-spacing:0;}
+  .plan-card .pkind{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#737373;}
+  .plan-card.is-armed{border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+  /* kind accents (left rule) */
+  .plan-card-goal{border-left:2px solid #0a0a0a;}
+  .plan-card-phase{border-left:2px solid #635bff;}
+  .plan-card-mile{border-left:2px solid #16a34a;}
+  .plan-card-risk{border-left:2px solid #f59e0b;}
+  /* ghost (not yet added) state for the build sequence */
+  .plan-card.is-ghost{opacity:0;transform:translateY(8px);border-style:dashed;}
+  .plan-card.is-shown{opacity:1;transform:none;}
+
+  /* the planning palette chips you "place" */
+  .plan-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid #eaeaea;background:#fff;
+    font-family:'Geist Mono',monospace;font-size:12px;color:#171717;padding:7px 10px;cursor:pointer;
+    transition:border-color .15s var(--ease-hover),background .15s var(--ease-hover),box-shadow .15s,color .15s;min-height:40px;}
+  .plan-chip:hover{border-color:#d6d6d6;background:#fafafa;}
+  .plan-chip.active{border-color:#635bff;color:#0a0a0a;box-shadow:0 0 0 3px rgba(99,91,255,0.08);}
+  .plan-chip .ck{width:8px;height:8px;flex:none;}
+  .ck-goal{background:#0a0a0a;} .ck-phase{background:#635bff;} .ck-mile{background:#16a34a;} .ck-risk{background:#f59e0b;}
+
+  /* compiled chain node fade-in */
+  .chain-node{transition:opacity .4s var(--ease-out),transform .4s var(--ease-out),border-color .25s;opacity:0;transform:translateY(8px);}
+  .chain-node.in{opacity:1;transform:none;}
+
+  /* mini bento for the deep "how it works" grid */
+  .pgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:1px;background:#eaeaea;border:1px solid #eaeaea;overflow:hidden;}
+  .pcell{position:relative;background:#fff;padding:22px;overflow:hidden;}
+  .pcell::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 80% at 85% 0%, rgba(99,91,255,0.045), transparent 60%);opacity:.6;}
+  @media (max-width:760px){ .pgrid{grid-template-columns:1fr;} .pcell{grid-column:span 1 !important;} }
+
+  /* current-page marker in the Features menu */
+  .nav-mega-link.is-active{color:#0a0a0a;background:#f3f3f4;}
+  .nav-acc-link.is-active{color:#0a0a0a;font-weight:500;}
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="../index.html" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="../index.html#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="./agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="./multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="./advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="./model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="./local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="./models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="./subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="./rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="./skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="./mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="./model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="./voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="./terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="./canvas-planning.html" class="nav-mega-link is-active" role="menuitem" aria-current="page"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="./analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="./rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="./secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="./git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="./testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="../index.html#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-tab">Streaming</a>
+      <a href="../docs.html" class="nav-tab">Docs</a>
+      <a href="../index.html#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="../index.html#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="./agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="./multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="./advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="./model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="./local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="./models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="./subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="./rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="./skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="./mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="./model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="./voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="./terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="./canvas-planning.html" class="nav-acc-link is-active" data-nav-close aria-current="page"><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="./analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="./rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="./secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="./git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="./testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="../index.html#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="../docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="../index.html#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Nav behavior (feature pages don't load ../app.js): scroll-opacity + mega-menu + mobile sheet -->
+<script>
+(function(){
+  var isTouch = window.matchMedia('(hover: none)').matches;
+
+  /* scroll state: opaque white/blur + hairline past ~8px */
+  var nav=document.getElementById('nav');
+  if(nav){
+    var onScroll=function(){ nav.classList.toggle('nav-scrolled', window.scrollY>8); };
+    onScroll(); window.addEventListener('scroll', onScroll, {passive:true});
+  }
+
+  /* Desktop Features mega-menu */
+  var wrap=document.getElementById('featMenuWrap');
+  var btn=document.getElementById('featMenuBtn');
+  var menu=document.getElementById('featMenu');
+  if(wrap&&btn&&menu){
+    var openTimer=null, closeTimer=null;
+    var isOpen=function(){ return wrap.classList.contains('is-open'); };
+    var open=function(){
+      clearTimeout(closeTimer);
+      wrap.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      menu.removeAttribute('hidden');
+    };
+    var close=function(){
+      clearTimeout(openTimer);
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      menu.setAttribute('hidden','');
+    };
+    btn.addEventListener('click',function(e){ e.stopPropagation(); isOpen()?close():open(); });
+    if(!isTouch){
+      wrap.addEventListener('pointerenter',function(){ clearTimeout(closeTimer); openTimer=setTimeout(open,60); });
+      wrap.addEventListener('pointerleave',function(){ clearTimeout(openTimer); closeTimer=setTimeout(close,140); });
+    }
+    document.addEventListener('click',function(e){ if(isOpen()&&!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&isOpen()){ close(); btn.focus(); } });
+    menu.addEventListener('click',function(e){ if(e.target.closest('a')) close(); });
+  }
+
+  /* Mobile sheet toggle */
+  var toggle=document.getElementById('navToggle');
+  var sheet=document.getElementById('mobileMenu');
+  var openIcon=document.getElementById('navOpenIcon');
+  var closeIcon=document.getElementById('navCloseIcon');
+  if(toggle&&sheet){
+    var setOpen=function(o){
+      sheet.classList.toggle('hidden',!o);
+      toggle.setAttribute('aria-expanded',String(o));
+      toggle.setAttribute('aria-label',o?'Close menu':'Open menu');
+      if(openIcon)openIcon.classList.toggle('hidden',o);
+      if(closeIcon)closeIcon.classList.toggle('hidden',!o);
+    };
+    toggle.addEventListener('click',function(){ setOpen(sheet.classList.contains('hidden')); });
+    sheet.querySelectorAll('[data-nav-close]').forEach(function(el){
+      el.addEventListener('click',function(){ setOpen(false); });
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&!sheet.classList.contains('hidden')){ setOpen(false); toggle.focus(); }
+    });
+    window.addEventListener('resize',function(){
+      if(window.innerWidth>=768&&!sheet.classList.contains('hidden')) setOpen(false);
+    });
+
+    /* Mobile Features accordion */
+    var accBtn=sheet.querySelector('.nav-acc-btn');
+    var accPanel=document.getElementById('navAccPanel');
+    if(accBtn&&accPanel){
+      accBtn.addEventListener('click',function(){
+        var expanded=accBtn.getAttribute('aria-expanded')==='true';
+        accBtn.setAttribute('aria-expanded',String(!expanded));
+        accPanel.toggleAttribute('hidden',expanded);
+      });
+    }
+  }
+})();
+</script>
+
+<main id="top" class="pt-16">
+
+<!-- ============ HERO ============ -->
+<section class="relative overflow-hidden border-b border-hair">
+  <div class="hero-sheen"></div>
+  <div class="relative max-w-content mx-auto px-6 pt-16 pb-14 md:pt-20 md:pb-16">
+    <a href="../index.html#features" class="link-arrow mb-7 text-[13px] reveal" style="--ease-hover:var(--ease-hover)">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="transform:scaleX(-1)"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+      Back to all features
+    </a>
+
+    <span class="eyebrow reveal">orchestration · planning</span>
+    <h1 class="h1 mt-5 max-w-3xl reveal" style="transition-delay:.05s">Canvas Planning</h1>
+    <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+      Plan the work before you build it. Shape goals, phases, milestones, and risks on a planning canvas — then turn the plan into a runnable chain.
+    </p>
+
+    <div class="mt-7 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+      <span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span>
+      <span class="badge"><span class="w-1.5 h-1.5 is-round bg-accent"></span> Open source · MIT</span>
+    </div>
+
+    <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 mono text-[13px] text-ink-muted reveal" style="transition-delay:.2s">
+      <span class="flex items-center gap-2"><span class="dot dot-run pulse-run"></span> plan-mode</span>
+      <span class="text-hair">·</span><span>goals → phases → milestones → risks</span>
+      <span class="text-hair">·</span><span class="text-ink-2">compiles to a chain</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT IT IS ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-16 items-start">
+      <div class="reveal">
+        <span class="eyebrow">what it is</span>
+        <h2 class="h2 mt-3">A plan-mode that lives on the same graph.</h2>
+      </div>
+      <div class="reveal" style="transition-delay:.06s">
+        <p class="lead">Lay out a <span class="text-ink-2">Goal</span>, split it into <span class="text-ink-2">Phases</span>, mark the <span class="text-ink-2">Milestones</span> that prove each phase landed, and flag the <span class="text-ink-2">Risks</span> that could derail it — as square cards on the same canvas you build chains on.</p>
+        <p class="mt-5 text-[15px] leading-[1.7] text-ink-body">The plan <span class="text-ink-2">is</span> the graph — no separate doc, no throwaway whiteboard. When the shape feels right, DISPATCH compiles it into typed nodes — <span class="mono text-[13.5px] text-ink-2">Plan</span>, <span class="mono text-[13.5px] text-ink-2">Investigate</span>, <span class="mono text-[13.5px] text-ink-2">Create</span>, <span class="mono text-[13.5px] text-ink-2">Review</span>, <span class="mono text-[13.5px] text-ink-2">Deploy</span> — wired top-to-bottom and ready to Run.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE DEMO ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">try it</span>
+      <h2 class="h2 mt-3">Shape a plan, then compile it.</h2>
+      <p class="lead mt-4">Place planning cards — Goal, Phase, Milestone, Risk — then compile them into a runnable chain and watch it wire itself.</p>
+    </div>
+
+    <div class="mt-10 grid lg:grid-cols-[1.25fr_0.75fr] gap-px bg-hair border border-hair reveal" id="planDemo">
+      <!-- LEFT: the planning canvas -->
+      <div class="bg-white flex flex-col">
+        <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-11">
+          <span class="eyebrow">planning canvas</span>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="planStatus"><span class="dot dot-run" id="planStatusDot"></span> plan-mode</span>
+        </div>
+
+        <!-- palette -->
+        <div class="px-4 sm:px-5 py-3 border-b border-hair flex flex-wrap items-center gap-2" id="planPalette" role="group" aria-label="Planning card types — choose what to place next">
+          <span class="mono text-[11px] text-ink-muted mr-1 hidden sm:inline">place:</span>
+          <button class="plan-chip active" data-kind="goal"><span class="ck ck-goal"></span>Goal</button>
+          <button class="plan-chip" data-kind="phase"><span class="ck ck-phase"></span>Phase</button>
+          <button class="plan-chip" data-kind="mile"><span class="ck ck-mile"></span>Milestone</button>
+          <button class="plan-chip" data-kind="risk"><span class="ck ck-risk"></span>Risk</button>
+        </div>
+
+        <!-- canvas surface -->
+        <div class="plan-stage flex-1 p-4 sm:p-5" id="planStage" style="min-height:330px;">
+          <div class="grid gap-2.5" id="planList" aria-live="polite" aria-label="Plan cards on the canvas">
+            <!-- cards injected by JS; static fallback below for no-JS -->
+            <noscript>
+              <div class="plan-card plan-card-goal"><div class="pkind">Goal</div><div class="plabel">Ship the new onboarding flow</div></div>
+              <div class="plan-card plan-card-phase"><div class="pkind">Phase</div><div class="plabel">Research existing drop-off</div></div>
+              <div class="plan-card plan-card-mile"><div class="pkind">Milestone</div><div class="plabel">Drop-off baseline measured</div></div>
+              <div class="plan-card plan-card-risk"><div class="pkind">Risk</div><div class="plabel">Analytics data is incomplete</div></div>
+            </noscript>
+          </div>
+
+          <p class="mt-4 mono text-[11px] text-ink-muted" id="planHint">Pick a card type above, then press <span class="text-ink-2">Place card</span>.</p>
+        </div>
+
+        <!-- canvas actions -->
+        <div class="flex flex-wrap items-center gap-2 border-t border-hair px-4 sm:px-5 py-3">
+          <button id="placeBtn" class="btn btn-ghost h-9 px-3.5 text-[13px]">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3v8M3 7h8"/></svg>
+            Place card
+          </button>
+          <button id="compileBtn" class="btn btn-primary h-9 px-3.5 text-[13px]">Compile to chain</button>
+          <button id="resetBtn" class="btn btn-ghost h-9 px-3.5 text-[13px] ml-auto">Reset</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: the compiled chain -->
+      <div class="bg-white flex flex-col">
+        <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-11">
+          <span class="eyebrow">compiled chain</span>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="chainStatus"><span class="dot dot-idle" id="chainStatusDot"></span> not compiled</span>
+        </div>
+
+        <div class="relative flex-1 p-4 sm:p-5" id="chainPane">
+          <!-- empty state -->
+          <div id="chainEmpty" class="h-full grid place-items-center text-center">
+            <div>
+              <div class="mx-auto w-9 h-9 border border-hair grid place-items-center mb-3">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#737373" stroke-width="1.4"><path d="M8 1v4M8 11v4M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/></svg>
+              </div>
+              <p class="mono text-[12px] text-ink-muted max-w-[15rem] mx-auto leading-relaxed">Compile the plan to wire it into a runnable chain of DISPATCH nodes.</p>
+            </div>
+          </div>
+
+          <!-- compiled chain -->
+          <div id="chainWrap" class="relative hidden">
+            <svg class="absolute left-0 top-0 w-full h-full pointer-events-none" viewBox="0 0 240 360" preserveAspectRatio="none" id="chainEdges" aria-hidden="true"></svg>
+            <div class="relative grid gap-4" id="chainList"></div>
+          </div>
+        </div>
+
+        <div class="border-t border-hair px-4 sm:px-5 py-3 mono text-[11px] text-ink-muted flex items-center gap-2" id="chainFoot">
+          <span id="chainFootText">A plan compiles to typed, wired nodes.</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="mt-4 mono text-[12px] text-ink-muted reveal">Non-destructive — compiling lays the chain beside the plan, never over it. Refine either side, recompile any time.</p>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS — deep bento ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">how it works</span>
+      <h2 class="h2 mt-3">Four card types. One compiler.</h2>
+      <p class="lead mt-4">Each planning card carries intent. The compiler reads that intent and emits the right DISPATCH node — with edges, context keys, and gates already in place.</p>
+    </div>
+
+    <div class="pgrid mt-10 reveal">
+      <!-- GOAL -->
+      <div class="pcell" style="grid-column:span 6;">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 bg-ink"></span>
+          <span class="eyebrow" style="color:#171717">goal</span>
+        </div>
+        <h3 class="h3 mt-3">The single outcome you're driving to.</h3>
+        <p class="mt-2.5 text-[14px] leading-[1.65] text-ink-body">One Goal card anchors the plan. The compiler turns it into the <span class="mono text-[13px] text-ink-2">Initialiser</span> + a <span class="mono text-[13px] text-ink-2">Plan</span> node that holds the brief and writes it to <span class="mono text-[13px] text-ink-2">run.plan</span> for every downstream node to read.</p>
+      </div>
+
+      <!-- PHASE -->
+      <div class="pcell" style="grid-column:span 6;">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 bg-accent"></span>
+          <span class="eyebrow" style="color:#4f48d6">phase</span>
+        </div>
+        <h3 class="h3 mt-3">A unit of work, in order.</h3>
+        <p class="mt-2.5 text-[14px] leading-[1.65] text-ink-body">Each Phase becomes one or more execution nodes — <span class="mono text-[13px] text-ink-2">Investigate</span>, <span class="mono text-[13px] text-ink-2">Design</span>, <span class="mono text-[13px] text-ink-2">Create</span> — wired top-to-bottom in the order you placed them. Phases can fan out with <span class="mono text-[13px] text-ink-2">Parallel</span> and reconverge with <span class="mono text-[13px] text-ink-2">Merge</span>.</p>
+      </div>
+
+      <!-- MILESTONE -->
+      <div class="pcell" style="grid-column:span 6;">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5" style="background:#16a34a"></span>
+          <span class="eyebrow" style="color:#15803d">milestone</span>
+        </div>
+        <h3 class="h3 mt-3">Proof a phase actually landed.</h3>
+        <p class="mt-2.5 text-[14px] leading-[1.65] text-ink-body">A Milestone compiles to a <span class="mono text-[13px] text-ink-2">Review</span> or <span class="mono text-[13px] text-ink-2">Evaluate</span> gate. The chain pauses there until the milestone's condition is met — a human checkpoint, or an automated assertion on the upstream output.</p>
+      </div>
+
+      <!-- RISK -->
+      <div class="pcell" style="grid-column:span 6;">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5" style="background:#f59e0b"></span>
+          <span class="eyebrow" style="color:#b06d05">risk</span>
+        </div>
+        <h3 class="h3 mt-3">The thing that could go wrong.</h3>
+        <p class="mt-2.5 text-[14px] leading-[1.65] text-ink-body">A Risk card attaches a mitigation to the phase it threatens — a retry policy, a timeout, a fallback branch, or an extra <span class="mono text-[13px] text-ink-2">Investigate</span> step. It surfaces in the compiled chain as guardrails, not surprises.</p>
+      </div>
+
+      <!-- COMPILE STRIP -->
+      <div class="pcell" style="grid-column:span 12;">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="dot dot-run pulse-run"></span>
+            <span class="eyebrow">the compile step</span>
+          </div>
+          <span class="mono text-[12px] text-ink-muted">plan → typed nodes → wired chain</span>
+        </div>
+        <p class="mt-3 text-[14px] leading-[1.65] text-ink-body max-w-3xl">Compiling reads the plan top-to-bottom and emits a <span class="text-ink-2">deterministic</span> graph — a normal DISPATCH chain, every node hotswappable, every edge live. Keep editing on the canvas after it compiles.</p>
+
+        <!-- inline mapping rail -->
+        <div class="mt-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-px bg-hair border border-hair mono text-[12px]">
+          <div class="bg-white px-3.5 py-3 flex items-center gap-2"><span class="w-2 h-2 bg-ink"></span><span class="text-ink-muted">Goal</span><span class="text-ink-muted ml-auto">→</span><span class="text-ink-2">Plan</span></div>
+          <div class="bg-white px-3.5 py-3 flex items-center gap-2"><span class="w-2 h-2 bg-accent"></span><span class="text-ink-muted">Phase</span><span class="text-ink-muted ml-auto">→</span><span class="text-ink-2">Investigate / Create</span></div>
+          <div class="bg-white px-3.5 py-3 flex items-center gap-2"><span class="w-2 h-2" style="background:#16a34a"></span><span class="text-ink-muted">Milestone</span><span class="text-ink-muted ml-auto">→</span><span class="text-ink-2">Review gate</span></div>
+          <div class="bg-white px-3.5 py-3 flex items-center gap-2"><span class="w-2 h-2" style="background:#f59e0b"></span><span class="text-ink-muted">Risk</span><span class="text-ink-muted ml-auto">→</span><span class="text-ink-2">retry / fallback</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHY IT MATTERS ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-16 items-start">
+      <div class="reveal">
+        <span class="eyebrow">why it matters</span>
+        <h2 class="h2 mt-3">Cheaper mistakes happen on the plan, not the run.</h2>
+      </div>
+      <div class="reveal" style="transition-delay:.06s">
+        <ul class="space-y-5">
+          <li class="flex gap-3.5">
+            <span class="mt-1.5 dot dot-done shrink-0"></span>
+            <p class="text-[15px] leading-[1.65] text-ink-body"><span class="text-ink-2 font-medium">Catch structure before you spend tokens.</span> A wrongly-shaped chain burns API spend every run. Fixing a misordered phase on the plan costs nothing.</p>
+          </li>
+          <li class="flex gap-3.5">
+            <span class="mt-1.5 dot dot-done shrink-0"></span>
+            <p class="text-[15px] leading-[1.65] text-ink-body"><span class="text-ink-2 font-medium">Intent is reviewable.</span> Goals, phases and risks read at a glance — a teammate can comment on the plan over the LAN before a single node fires.</p>
+          </li>
+          <li class="flex gap-3.5">
+            <span class="mt-1.5 dot dot-done shrink-0"></span>
+            <p class="text-[15px] leading-[1.65] text-ink-body"><span class="text-ink-2 font-medium">Risks become guardrails, not incidents.</span> Naming what could break up front means the chain ships with retries and gates exactly where they belong.</p>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RELATED FEATURES ============ -->
+<section class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="flex items-center gap-14 mb-8">
+      <div class="reveal">
+        <span class="eyebrow">related features</span>
+        <h2 class="h2 mt-3">Pairs well with</h2>
+      </div>
+    </div>
+
+    <div class="feat-grid reveal">
+      <a href="./advanced-orchestration.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">control</span></div>
+        <h3 class="feat-title">Advanced Orchestration</h3>
+        <p class="feat-desc">Branch, retry, cap concurrency, loop, nest, gate, timeout — the controls a compiled plan emits.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./agentic-streaming.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">flagship</span></div>
+        <h3 class="feat-title">Agentic Streaming</h3>
+        <p class="feat-desc">Fan a planned phase out across 20 agents — parallel, streamed, synthesized.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+      <a href="./git-backed-canvas.html" class="feat-card">
+        <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">versioned</span></div>
+        <h3 class="feat-title">Git-backed Canvas</h3>
+        <p class="feat-desc">Your plan is a file too — commit, diff, and review it like code.</p>
+        <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+
+    <a href="../index.html#features" class="link-arrow mt-8 text-[14px]">
+      Back to all features
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- ============ END CTA ============ -->
+<section class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="cta-panel reveal">
+      <div class="cta-tex" aria-hidden="true"></div>
+      <div class="cta-glow" aria-hidden="true"></div>
+      <div class="cta-rail">
+        <span class="eyebrow">canvas planning</span>
+        <span class="mono text-[11px] text-ink-muted flex items-center gap-2"><span class="dot dot-run pulse-run"></span> in development</span>
+      </div>
+      <div class="cta-body">
+        <div class="cta-left">
+          <h2 class="cta-head">Plan it once.<br>Run it for real.</h2>
+          <p class="cta-sub">Canvas Planning is landing soon. It's MIT — follow along or jump in, every contribution moves it forward.</p>
+          <div class="cta-actions">
+            <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-dark h-11 px-5 text-[15px]">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              View on GitHub
+            </a>
+            <a href="../index.html#features" class="btn btn-ghost h-11 px-5 text-[15px]">All features</a>
+          </div>
+          <div class="cta-backed">
+            <span class="eyebrow">backed by</span>
+            <div class="cta-backed-row">
+              <span class="cta-backer">Pyca Ireland</span>
+              <span class="cta-backer">Helios Labs</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- planning → chain motif -->
+        <div class="cta-chain" aria-hidden="true">
+          <svg class="cta-chain-edges" viewBox="0 0 200 260" preserveAspectRatio="none">
+            <path class="edge active" d="M100,42 L100,74"/>
+            <path class="edge active" d="M100,106 L100,138"/>
+            <path class="edge active" d="M100,170 L100,202"/>
+          </svg>
+          <div class="cta-chain-nodes">
+            <div class="node" style="border-left:2px solid #0a0a0a"><span class="dot dot-run pulse-run"></span><span class="nlabel">Plan</span><span class="ml-auto mono text-[11px] text-ink-muted">goal</span></div>
+            <div class="node" style="border-left:2px solid #635bff"><span class="dot dot-idle"></span><span class="nlabel">Investigate</span><span class="ml-auto mono text-[11px] text-ink-muted">phase</span></div>
+            <div class="node" style="border-left:2px solid #635bff"><span class="dot dot-idle"></span><span class="nlabel">Create</span><span class="ml-auto mono text-[11px] text-ink-muted">phase</span></div>
+            <div class="node" style="border-left:2px solid #16a34a"><span class="dot dot-idle"></span><span class="nlabel">Review</span><span class="ml-auto mono text-[11px] text-ink-muted">milestone</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="../index.html" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="../index.html#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="../index.html#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="../index.html#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+          <li><a href="../index.html#deploy" class="hover:text-ink-2 transition-colors">Pod deployments</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ REVEAL + PLANNING DEMO ============ -->
+<script>
+(function(){
+  // ---- IntersectionObserver reveal (reduced-motion safe via CSS) ----
+  var reveals=[].slice.call(document.querySelectorAll('.reveal'));
+  if('IntersectionObserver' in window && reveals.length){
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    },{rootMargin:'0px 0px -10% 0px',threshold:0.08});
+    reveals.forEach(function(el){ io.observe(el); });
+  } else {
+    reveals.forEach(function(el){ el.classList.add('in'); });
+  }
+})();
+
+(function(){
+  // ---- PLANNING DEMO ----
+  var palette=document.getElementById('planPalette');
+  var list=document.getElementById('planList');
+  var placeBtn=document.getElementById('placeBtn');
+  var compileBtn=document.getElementById('compileBtn');
+  var resetBtn=document.getElementById('resetBtn');
+  var hint=document.getElementById('planHint');
+  var chainEmpty=document.getElementById('chainEmpty');
+  var chainWrap=document.getElementById('chainWrap');
+  var chainList=document.getElementById('chainList');
+  var chainEdges=document.getElementById('chainEdges');
+  var chainStatus=document.getElementById('chainStatus');
+  var chainStatusDot=document.getElementById('chainStatusDot');
+  var chainFootText=document.getElementById('chainFootText');
+  if(!palette||!list||!placeBtn)return;
+
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // A scripted but real plan: pressing "Place card" walks this sequence,
+  // and the active palette chip follows along so the kind is honest.
+  var SCRIPT=[
+    {kind:'goal',  label:'Ship the new onboarding flow'},
+    {kind:'phase', label:'Investigate current drop-off'},
+    {kind:'mile',  label:'Drop-off baseline measured'},
+    {kind:'phase', label:'Design + build the v2 flow'},
+    {kind:'risk',  label:'Analytics data is incomplete'},
+    {kind:'mile',  label:'v2 passes human review'}
+  ];
+  var KIND_META={
+    goal:{cls:'plan-card-goal',name:'Goal'},
+    phase:{cls:'plan-card-phase',name:'Phase'},
+    mile:{cls:'plan-card-mile',name:'Milestone'},
+    risk:{cls:'plan-card-risk',name:'Risk'}
+  };
+  // plan card -> compiled node mapping
+  var COMPILE=[
+    {dot:'dot-run',  type:'Plan',        meta:'goal · seeds run.plan',  accent:'#0a0a0a', pulse:true},
+    {dot:'dot-idle', type:'Investigate', meta:'phase · web_search',     accent:'#635bff'},
+    {dot:'dot-idle', type:'Review',      meta:'milestone · gate',       accent:'#16a34a'},
+    {dot:'dot-idle', type:'Create',      meta:'phase · retry + fallback',accent:'#635bff'},
+    {dot:'dot-idle', type:'Review',      meta:'milestone · human gate', accent:'#16a34a'}
+  ];
+
+  var placed=0;
+
+  function setActiveChip(kind){
+    [].slice.call(palette.querySelectorAll('.plan-chip')).forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-kind')===kind);
+    });
+  }
+
+  function placeNext(){
+    if(placed>=SCRIPT.length){
+      hint.innerHTML='Plan complete — press <span class="text-ink-2">Compile to chain</span>.';
+      return;
+    }
+    var item=SCRIPT[placed];
+    var meta=KIND_META[item.kind];
+    setActiveChip(item.kind);
+    var card=document.createElement('div');
+    card.className='plan-card '+meta.cls+(reduce?' is-shown':' is-ghost');
+    card.innerHTML='<div class="pkind">'+meta.name+'</div><div class="plabel">'+item.label+'</div>';
+    list.appendChild(card);
+    // arm + reveal
+    if(!reduce){
+      requestAnimationFrame(function(){
+        card.classList.add('is-armed');
+        requestAnimationFrame(function(){ card.classList.add('is-shown'); });
+        setTimeout(function(){ card.classList.remove('is-armed'); }, 420);
+      });
+    }
+    placed++;
+    if(placed>=SCRIPT.length){
+      hint.innerHTML='Plan complete — press <span class="text-ink-2">Compile to chain</span>.';
+    }else{
+      hint.innerHTML='Next up: <span class="text-ink-2">'+KIND_META[SCRIPT[placed].kind].name+'</span>. Press <span class="text-ink-2">Place card</span>.';
+    }
+  }
+
+  // let the palette chips drive which kind seeds the NEXT placement
+  [].slice.call(palette.querySelectorAll('.plan-chip')).forEach(function(b){
+    b.addEventListener('click',function(){
+      var kind=b.getAttribute('data-kind');
+      setActiveChip(kind);
+      // jump the script pointer to the next item of this kind if available
+      for(var i=placed;i<SCRIPT.length;i++){
+        if(SCRIPT[i].kind===kind){
+          // rotate the chosen kind to the front of the remaining queue
+          var moved=SCRIPT.splice(i,1)[0];
+          SCRIPT.splice(placed,0,moved);
+          break;
+        }
+      }
+      hint.innerHTML='Next up: <span class="text-ink-2">'+KIND_META[kind].name+'</span>. Press <span class="text-ink-2">Place card</span>.';
+    });
+  });
+
+  placeBtn.addEventListener('click', placeNext);
+
+  function buildEdges(n){
+    // vertical chain edges between n stacked nodes in a 240x360 box
+    var step=360/(n);
+    var html='';
+    for(var i=0;i<n-1;i++){
+      var y1=(i+0.5)*step+18;
+      var y2=(i+1)*step+2;
+      html+='<path class="edge active" d="M120,'+y1.toFixed(0)+' L120,'+y2.toFixed(0)+'"/>';
+    }
+    chainEdges.innerHTML=html;
+  }
+
+  function compile(){
+    // compile however many plan cards exist; cap to mapping length
+    var count=Math.max(1, Math.min(placed, COMPILE.length));
+    if(placed===0)count=COMPILE.length; // compiling empty shows the full sample chain
+    chainEmpty.classList.add('hidden');
+    chainWrap.classList.remove('hidden');
+    chainList.innerHTML='';
+    chainStatusDot.className='dot dot-run pulse-run';
+    chainStatus.lastChild.textContent=' compiling';
+    chainFootText.textContent='Compiling plan → typed nodes…';
+
+    var nodes=COMPILE.slice(0,count);
+    nodes.forEach(function(n,i){
+      var el=document.createElement('div');
+      el.className='node chain-node';
+      el.style.borderLeft='2px solid '+n.accent;
+      el.innerHTML='<span class="dot '+n.dot+(n.pulse?' pulse-run':'')+'"></span>'+
+                   '<span class="nlabel">'+n.type+'</span>'+
+                   '<span class="ml-auto mono text-[11px] text-ink-muted">'+n.meta+'</span>';
+      chainList.appendChild(el);
+      var delay=reduce?0:140*i;
+      setTimeout(function(){ el.classList.add('in'); }, delay);
+    });
+    buildEdges(nodes.length);
+
+    var totalDelay=reduce?0:140*nodes.length+260;
+    setTimeout(function(){
+      chainStatusDot.className='dot dot-done';
+      chainStatus.lastChild.textContent=' compiled · '+nodes.length+' nodes';
+      chainFootText.textContent='Ready to Run — every node still hotswappable, every edge live.';
+    }, totalDelay);
+  }
+
+  compileBtn.addEventListener('click', compile);
+
+  resetBtn.addEventListener('click',function(){
+    placed=0;
+    list.innerHTML='';
+    chainList.innerHTML='';
+    chainEdges.innerHTML='';
+    chainWrap.classList.add('hidden');
+    chainEmpty.classList.remove('hidden');
+    chainStatusDot.className='dot dot-idle';
+    chainStatus.lastChild.textContent=' not compiled';
+    chainFootText.textContent='A plan compiles to typed, wired nodes.';
+    hint.innerHTML='Pick a card type above, then press <span class="text-ink-2">Place card</span>.';
+    setActiveChip('goal');
+  });
+
+  // ---- auto-place the first two cards once the demo scrolls into view ----
+  if('IntersectionObserver' in window){
+    var demo=document.getElementById('planDemo');
+    var started=false;
+    var dio=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting && !started){
+          started=true; dio.disconnect();
+          if(reduce){ placeNext(); placeNext(); placeNext(); return; }
+          var k=0; var t=setInterval(function(){
+            placeNext(); k++;
+            if(k>=2){ clearInterval(t); }
+          }, 520);
+        }
+      });
+    },{threshold:0.25});
+    if(demo)dio.observe(demo);
+  }
+})();
+</script>
+
+</body>
+</html>

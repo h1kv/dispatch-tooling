@@ -1,0 +1,1257 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth no-js">
+<head>
+<!-- no-js → js bootstrap: reveal animations only run when JS is present -->
+<script>document.documentElement.classList.remove('no-js');document.documentElement.classList.add('js');</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISPATCH.AI — The canvas for agents.</title>
+<meta name="description" content="DISPATCH.AI is an open-source (MIT) visual canvas for building AI agent workflows. Place nodes, wire them top-to-bottom, press Run — output flows downstream. Multi-provider, live tools, voice control, human-in-the-loop." />
+
+<!-- Geist + Geist Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: { DEFAULT: '#0a0a0a', 2: '#171717', body: '#595959', muted: '#737373' },
+          hair: { DEFAULT: '#eaeaea', tint: '#e6ebf1' },
+          accent: { DEFAULT: '#635bff', hover: '#5a52e8' },
+          st: { idle: '#737373', run: '#635bff', done: '#16a34a', paused: '#f59e0b', error: '#ef4444' },
+        },
+        maxWidth: { content: '1140px' },
+        borderRadius: {
+          none: '0', DEFAULT: '0', sm: '0', md: '0', lg: '0',
+          xl: '0', '2xl': '0', '3xl': '0', card: '0', full: '9999px',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Three.js ESM importmap (pinned) -->
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+
+<!-- Bespoke CSS (square net + tokens) -->
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<header id="nav" class="fixed top-0 inset-x-0 z-50 h-16 transition-all duration-200">
+  <div class="max-w-content mx-auto h-full px-6 flex items-center justify-between">
+    <a href="#top" class="flex items-center gap-2.5 group" aria-label="DISPATCH.AI home">
+      <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white">
+        <span class="w-2 h-2 bg-ink"></span>
+        <span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span>
+      </span>
+      <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Primary">
+      <a href="#bento" class="nav-tab">Canvas</a>
+
+      <!-- Features mega-menu trigger + panel -->
+      <div class="nav-tab-wrap" id="featMenuWrap">
+        <button type="button" class="nav-tab nav-tab-btn" id="featMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="featMenu">
+          Features
+          <svg class="nav-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+
+        <div class="nav-mega" id="featMenu" role="menu" aria-label="Features" hidden>
+          <div class="nav-mega-inner">
+            <!-- ORCHESTRATION -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">orchestration</span></div>
+              <a href="features/agentic-streaming.html" class="nav-mega-link" role="menuitem"><span class="dot dot-run"></span>Agentic Streaming</a>
+              <a href="features/multiplayer-collab.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Multiplayer Collab</a>
+              <a href="features/advanced-orchestration.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Advanced Orchestration</a>
+            </div>
+            <!-- MODELS -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">models</span></div>
+              <a href="features/model-hotswap.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Model Hotswap</a>
+              <a href="features/local-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Local Models</a>
+              <a href="features/models-md-directive.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>MODELS.md Directive</a>
+              <a href="features/subscription-models.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Subscription Models</a>
+            </div>
+            <!-- KNOWLEDGE + EXTENSIBILITY -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">knowledge + extensibility</span></div>
+              <a href="features/rag.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>RAG</a>
+              <a href="features/skills-as-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Skills-as-Nodes</a>
+              <a href="features/mcp-integrations.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>MCP + Integrations</a>
+              <a href="features/model-prompt.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Model Prompt</a>
+            </div>
+            <!-- INTERFACE + CONTROL -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">interface + control</span></div>
+              <a href="features/voice-control.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Voice Control</a>
+              <a href="features/terminal-cli.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Terminal / CLI</a>
+              <a href="features/canvas-planning.html" class="nav-mega-link" role="menuitem"><span class="dot dot-test"></span>Canvas Planning</a>
+              <a href="features/analytics.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Analytics</a>
+            </div>
+            <!-- INFRASTRUCTURE -->
+            <div class="nav-mega-col">
+              <div class="nav-mega-head"><span class="eyebrow">infrastructure</span></div>
+              <a href="features/rapid-pod-deployments.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+              <a href="features/secure-local.html" class="nav-mega-link" role="menuitem"><span class="dot dot-done"></span>Secure / Local</a>
+              <a href="features/git-backed-canvas.html" class="nav-mega-link" role="menuitem"><span class="dot dot-paused"></span>Git-backed Canvas</a>
+              <a href="features/testing-nodes.html" class="nav-mega-link" role="menuitem"><span class="dot dot-idle"></span>Testing Nodes</a>
+            </div>
+          </div>
+          <a href="#features" class="nav-mega-foot" id="featMenuAll">
+            <span>Browse all 19 capabilities</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <a href="#streaming" class="nav-tab">Streaming</a>
+      <a href="docs.html" class="nav-tab">Docs</a>
+      <a href="#deploy" class="nav-tab">Roadmap</a>
+    </nav>
+
+    <div class="flex items-center gap-2.5">
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost group hidden sm:inline-flex" aria-label="View on GitHub">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="mono text-[13px]">View on GitHub</span>
+      </a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary hidden sm:inline-flex">Get started</a>
+      <button id="navToggle" type="button" class="btn btn-ghost md:hidden w-11 h-11 px-0 justify-center" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <svg id="navOpenIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg id="navCloseIcon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu sheet -->
+  <nav id="mobileMenu" class="md:hidden hidden nav-sheet" aria-label="Mobile">
+    <div class="nav-sheet-inner">
+      <a href="#bento" class="nav-mobile-link" data-nav-close>Canvas</a>
+
+      <!-- Features collapsible groups -->
+      <div class="nav-sheet-acc" id="navAcc">
+        <button type="button" class="nav-mobile-link nav-acc-btn" aria-expanded="false" aria-controls="navAccPanel">
+          Features
+          <svg class="nav-caret ml-auto" width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+        </button>
+        <div class="nav-acc-panel" id="navAccPanel" hidden>
+          <div class="nav-acc-group"><span class="eyebrow">orchestration</span>
+            <a href="features/agentic-streaming.html" class="nav-acc-link" data-nav-close><span class="dot dot-run"></span>Agentic Streaming</a>
+            <a href="features/multiplayer-collab.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Multiplayer Collab</a>
+            <a href="features/advanced-orchestration.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Advanced Orchestration</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">models</span>
+            <a href="features/model-hotswap.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Model Hotswap</a>
+            <a href="features/local-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Local Models</a>
+            <a href="features/models-md-directive.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>MODELS.md Directive</a>
+            <a href="features/subscription-models.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Subscription Models</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">knowledge + extensibility</span>
+            <a href="features/rag.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>RAG</a>
+            <a href="features/skills-as-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Skills-as-Nodes</a>
+            <a href="features/mcp-integrations.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>MCP + Integrations</a>
+            <a href="features/model-prompt.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Model Prompt</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">interface + control</span>
+            <a href="features/voice-control.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Voice Control</a>
+            <a href="features/terminal-cli.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Terminal / CLI</a>
+            <a href="features/canvas-planning.html" class="nav-acc-link" data-nav-close><span class="dot dot-test"></span>Canvas Planning</a>
+            <a href="features/analytics.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Analytics</a>
+          </div>
+          <div class="nav-acc-group"><span class="eyebrow">infrastructure</span>
+            <a href="features/rapid-pod-deployments.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Rapid Pod Deployments</a>
+            <a href="features/secure-local.html" class="nav-acc-link" data-nav-close><span class="dot dot-done"></span>Secure / Local</a>
+            <a href="features/git-backed-canvas.html" class="nav-acc-link" data-nav-close><span class="dot dot-paused"></span>Git-backed Canvas</a>
+            <a href="features/testing-nodes.html" class="nav-acc-link" data-nav-close><span class="dot dot-idle"></span>Testing Nodes</a>
+          </div>
+        </div>
+      </div>
+
+      <a href="#streaming" class="nav-mobile-link" data-nav-close>Streaming</a>
+      <a href="docs.html" class="nav-mobile-link" data-nav-close>Docs</a>
+      <a href="#deploy" class="nav-mobile-link" data-nav-close>Roadmap</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="nav-mobile-link" data-nav-close>View on GitHub</a>
+      <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-primary mt-3 w-full justify-center" data-nav-close>Get started</a>
+    </div>
+  </nav>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="relative pt-16 overflow-hidden">
+  <div class="hero-sheen"></div>
+  <canvas id="hero-canvas" class="absolute inset-0 w-full h-full block" aria-hidden="true"></canvas>
+  <div id="hero-fallback" class="absolute inset-0 hidden" aria-hidden="true">
+    <div class="absolute inset-0 grid-tex opacity-40"></div>
+    <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+      <g stroke="#171717" stroke-opacity="0.10">
+        <line x1="20%" y1="30%" x2="40%" y2="55%"/><line x1="40%" y1="55%" x2="65%" y2="40%"/>
+        <line x1="65%" y1="40%" x2="80%" y2="68%"/><line x1="30%" y1="70%" x2="55%" y2="62%"/>
+      </g>
+      <g fill="#171717" fill-opacity="0.5">
+        <circle cx="20%" cy="30%" r="3"/><circle cx="40%" cy="55%" r="3"/><circle cx="65%" cy="40%" r="3"/>
+        <circle cx="80%" cy="68%" r="3"/><circle cx="30%" cy="70%" r="3"/><circle cx="55%" cy="62%" r="3"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="relative max-w-content mx-auto px-6 pt-24 pb-20 md:pt-28 md:pb-24">
+    <div class="max-w-3xl">
+      <span class="badge reveal">
+        <span class="w-1.5 h-1.5 is-round bg-accent"></span> Open source · MIT
+      </span>
+
+      <h1 class="h1 mt-6 reveal" style="transition-delay:.05s">The canvas for agents.</h1>
+
+      <p class="lead mt-6 max-w-2xl reveal" style="transition-delay:.1s">
+        Place nodes on an infinite canvas, wire them top&#8209;to&#8209;bottom, and press Run.
+        Each node hands its output — and control — downstream: investigate, plan, design, review — executing as one chain you watch in real time.
+      </p>
+
+      <div class="mt-9 flex flex-wrap items-center gap-3 reveal" style="transition-delay:.15s">
+        <a href="https://github.com/h1kv/dispatch-tooling" id="magnetCta" class="btn btn-dark h-11 px-5 text-[15px]">
+          <svg id="ghGlyph" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="transition:transform .2s var(--ease-out)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span id="magnetLabel">View on GitHub</span>
+        </a>
+        <a href="#bento" class="btn btn-ghost h-11 px-5 text-[15px]">See the canvas</a>
+      </div>
+
+      <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] mono text-ink-muted reveal" style="transition-delay:.2s">
+        <span>MIT licensed</span><span class="text-hair">·</span>
+        <span>OpenAI · Anthropic · Google</span><span class="text-hair">·</span>
+        <span>Self-host or local</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROVIDER STRIP ============ -->
+<section class="border-y border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-5 flex flex-wrap items-center justify-between gap-6">
+    <span class="eyebrow">any model, per node</span>
+    <div class="flex flex-wrap items-center gap-x-9 gap-y-3 text-ink-2 opacity-80">
+      <span class="font-semibold tracking-tight text-[15px]">OpenAI</span>
+      <span class="font-semibold tracking-tight text-[15px]">Anthropic</span>
+      <span class="font-semibold tracking-tight text-[15px]">Google</span>
+      <span class="mono text-[13px] text-ink-muted">+ any compatible endpoint</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHAT vs CANVAS (refined: node chain maps step-for-step to the prompt loop) ============ -->
+<section id="why" class="border-b border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">why a canvas</span>
+      <h2 class="h2 mt-3">Stop prompting in a loop.</h2>
+      <p class="lead mt-4">A chat window makes you the runtime — prompt, wait, copy, paste, re-prompt. DISPATCH lets you wire the work once and press Run. Every messy turn on the left becomes one deterministic node on the right.</p>
+    </div>
+
+    <div class="cmp-grid mt-10 border border-hair bg-hair reveal">
+      <!-- LEFT: the old way -->
+      <div class="cmp-col">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">prompting</span>
+          <span class="mono text-[11px] text-ink-muted">the old way</span>
+        </div>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">You babysit every step.</p>
+
+        <div class="cmp-thread mt-5" aria-label="A tedious chat back-and-forth">
+          <div class="cmp-bubble cmp-you" data-cmp="1">
+            <span class="cmp-role">you</span>
+            <p>Research our top 3 competitors and gather the latest numbers.</p>
+          </div>
+          <div class="cmp-bubble cmp-ai">
+            <span class="cmp-role cmp-role-ai">ai</span>
+            <p>Sure — which competitors did you have in mind?</p>
+          </div>
+          <div class="cmp-bubble cmp-you" data-cmp="2">
+            <span class="cmp-role">you</span>
+            <p>The three from the deck. Now compare their pricing tiers.</p>
+          </div>
+          <div class="cmp-bubble cmp-ai">
+            <span class="cmp-role cmp-role-ai">ai</span>
+            <p>Here's a comparison. <span class="cmp-muted">(copy → paste → re-read…)</span></p>
+          </div>
+          <div class="cmp-bubble cmp-you" data-cmp="3">
+            <span class="cmp-role">you</span>
+            <p>Good. Draft a one-page summary from that.</p>
+          </div>
+          <div class="cmp-bubble cmp-you" data-cmp="4">
+            <span class="cmp-role">you</span>
+            <p>Now check it for errors before I send it.</p>
+          </div>
+          <div class="cmp-wait" aria-hidden="true">
+            <span class="cmp-dot"></span><span class="cmp-dot"></span><span class="cmp-dot"></span>
+            <span class="mono text-[11px] text-ink-muted ml-1">waiting…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: with DISPATCH — a real mini-canvas; one node per prompt turn -->
+      <div class="cmp-col cmp-col-accent">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">the canvas</span>
+          <span class="mono text-[11px] text-accent">with dispatch</span>
+        </div>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">You wire it once. It runs itself.</p>
+
+        <!-- mini-canvas: dotted grid backdrop, run header, drawn accent edges, rich nodes -->
+        <div class="cmp-canvas mt-5" id="cmpCanvas" aria-label="The same task wired as a DISPATCH canvas">
+          <div class="cmp-canvas-head">
+            <span class="cmp-run-btn"><svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M2 1l6 4-6 4z"/></svg>Run</span>
+            <span class="cmp-canvas-meta" id="cmpCanvasMeta"><span class="dot dot-idle" id="cmpStatusDot"></span> ready</span>
+          </div>
+
+          <div class="cmp-flow">
+            <svg class="cmp-flow-edges" viewBox="0 0 260 432" preserveAspectRatio="none" aria-hidden="true">
+              <path class="cmp-edge" d="M130,96 L130,144"/>
+              <path class="cmp-edge" d="M130,240 L130,288"/>
+              <path class="cmp-edge" d="M130,384 L130,432"/>
+            </svg>
+
+            <div class="cmp-flow-nodes">
+              <!-- maps to: "Research top 3 competitors" + the "which competitors?" clarification -->
+              <div class="cmp-cnode" data-cmp="1">
+                <div class="cmp-cnode-head"><span class="dot dot-done"></span><span class="nlabel">Investigate</span><span class="cmp-badge">claude · sonnet</span></div>
+                <div class="cmp-cnode-instr">Research the 3 competitors from <span class="cmp-ctx">Context → deck</span>.</div>
+                <div class="cmp-cnode-out">web_search → 3 sources · no "which ones?" — pre-scoped</div>
+              </div>
+              <!-- maps to: "compare their pricing tiers" + copy/paste -->
+              <div class="cmp-cnode" data-cmp="2">
+                <div class="cmp-cnode-head"><span class="dot dot-done"></span><span class="nlabel">Compare</span><span class="cmp-badge">openai · gpt-4o</span></div>
+                <div class="cmp-cnode-instr">Build a pricing-tier table from the findings.</div>
+                <div class="cmp-cnode-out">edge carries output in — no copy / paste</div>
+              </div>
+              <!-- maps to: "draft a one-page summary" -->
+              <div class="cmp-cnode" data-cmp="3">
+                <div class="cmp-cnode-head"><span class="dot dot-done"></span><span class="nlabel">Draft</span><span class="cmp-badge">claude · opus</span></div>
+                <div class="cmp-cnode-instr">Write a one-page summary from the table.</div>
+                <div class="cmp-cnode-out">summary.md · 412 words</div>
+              </div>
+              <!-- maps to: "check it for errors before I send" -->
+              <div class="cmp-cnode is-running" data-cmp="4">
+                <div class="cmp-cnode-head"><span class="dot dot-run pulse-run" id="cmpRunDot"></span><span class="nlabel">Review</span><span class="cmp-badge cmp-badge-accent">error pass · gate</span></div>
+                <div class="cmp-cnode-instr">Proof for errors, then hold for sign-off.</div>
+                <div class="cmp-cnode-out cmp-cnode-out-accent">2 fixes · awaiting approve</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="cmp-punch mt-6">Four turns of babysitting → four wired nodes. Press Run once.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BENTO — live IDE/canvas peek (compact showpiece) ============ -->
+<section id="bento" class="max-w-content mx-auto px-6 py-16 md:py-20">
+  <div class="max-w-2xl reveal">
+    <span class="eyebrow">the canvas</span>
+    <h2 class="h2 mt-3">One graph. Every capability, live.</h2>
+    <p class="lead mt-4">Each tile is a real DISPATCH.AI surface — not a screenshot. Move across the grid; the canvas reacts.</p>
+  </div>
+
+  <div class="bento-wrap mt-10 reveal">
+    <div class="bento" id="bentoGrid">
+
+      <!-- LIVE CANVAS MARQUEE -->
+      <div class="cell" style="grid-column:span 8;grid-row:span 2;">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">live run</span>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="runStatus"><span class="dot dot-idle"></span> idle</span>
+        </div>
+
+        <div class="relative mt-5 h-[330px]" id="liveRunStage">
+          <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 600 300" preserveAspectRatio="none" id="runEdges">
+            <path class="edge" id="e1" d="M300,52 C300,80 300,90 300,118"/>
+            <path class="edge" id="e2" d="M300,160 C300,188 300,198 300,226"/>
+          </svg>
+
+          <div class="absolute left-1/2 -translate-x-1/2 top-[8px] w-[230px]">
+            <div class="node" id="n1"><span class="dot dot-idle" id="d1"></span><span class="nlabel">Initialiser</span><span class="ml-auto mono text-[11px] text-ink-muted">trigger</span></div>
+          </div>
+          <div class="absolute left-1/2 -translate-x-1/2 top-[116px] w-[230px]">
+            <div class="node" id="n2"><span class="dot dot-idle" id="d2"></span><span class="nlabel">Investigate</span><span class="ml-auto mono text-[11px] text-ink-muted">web_search</span></div>
+          </div>
+          <div class="absolute left-1/2 -translate-x-1/2 top-[222px] w-[268px]">
+            <div class="review-node" id="n3">
+              <div class="review-head"><span class="dot dot-idle" id="d3"></span><span class="nlabel">Review</span><span class="ml-auto mono text-[11px] text-ink-muted">human checkpoint</span></div>
+              <div class="review-actions">
+                <button class="review-btn review-approve" id="approveBtn">Approve</button>
+                <button class="review-btn review-reject">Reject</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODEL HOTSWAP -->
+      <div class="cell" style="grid-column:span 4;">
+        <span class="eyebrow">model hotswap</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Swap provider live.</p>
+        <div class="mt-4 flex items-center gap-1 text-[12px] mono" id="provTabs">
+          <button class="px-2.5 py-1 border border-hair text-ink-2" data-prov="openai">OpenAI</button>
+          <button class="px-2.5 py-1 border border-hair text-ink-muted" data-prov="anthropic">Anthropic</button>
+          <button class="px-2.5 py-1 border border-hair text-ink-muted" data-prov="google">Google</button>
+        </div>
+        <div class="mt-3 border border-hair text-[12px] mono" id="modelList"></div>
+        <div class="mt-3 node">
+          <span class="dot dot-run"></span><span class="nlabel">Create</span>
+          <span class="ml-auto mono text-[11px] text-accent" id="nodeModel">gpt-4o</span>
+        </div>
+      </div>
+
+      <!-- LIVE TOOLS -->
+      <div class="cell" style="grid-column:span 4;">
+        <span class="eyebrow">live tools</span>
+        <div class="mt-3 font-mono text-[12.5px] leading-[1.9] text-ink-2" id="toolList" aria-label="Available tools">
+          <div><span class="text-ink-muted">›</span> web_search</div>
+          <div><span class="text-ink-muted">›</span> fetch_url</div>
+          <div><span class="text-ink-muted">›</span> read_file</div>
+          <div><span class="text-ink-muted">›</span> write_file</div>
+          <div><span class="text-ink-muted">›</span> <span id="toolType"></span><span class="caret" id="toolCaret"></span></div>
+        </div>
+      </div>
+
+      <!-- CONTEXT / MEMORY -->
+      <div class="cell" style="grid-column:span 4;">
+        <span class="eyebrow">context + memory</span>
+        <p class="mt-3 text-[15px] text-ink-2 font-medium">Shared across the graph.</p>
+        <div class="mt-3 border border-hair px-2.5 py-2 flex items-center gap-2 text-[12px] mono">
+          <span class="text-ink-muted">Context</span>
+          <span class="text-ink-2">run.findings</span>
+          <span class="ml-auto text-st-done">write</span><span class="text-ink-muted">·</span><span class="text-accent">read</span>
+        </div>
+        <div class="mt-2 border border-hair px-2.5 py-2 flex items-center gap-2 text-[12px] mono">
+          <span class="text-ink-muted">Context</span>
+          <span class="text-ink-2">run.plan</span>
+          <span class="ml-auto text-st-done">write</span><span class="text-ink-muted">·</span><span class="text-accent">read</span>
+        </div>
+      </div>
+
+      <!-- PARALLEL / MERGE -->
+      <div class="cell" style="grid-column:span 4;">
+        <span class="eyebrow">parallel + merge</span>
+        <svg class="mt-3 w-full h-[88px]" viewBox="0 0 200 92" fill="none">
+          <rect x="74" y="4" width="52" height="22" stroke="#eaeaea" fill="#fff"/>
+          <text x="100" y="19" text-anchor="middle" font-family="Geist Mono" font-size="10" fill="#171717">Parallel</text>
+          <path d="M90,26 C66,40 50,46 40,60" stroke="#635bff" stroke-width="1.4"/>
+          <path d="M110,26 C134,40 150,46 160,60" stroke="#635bff" stroke-width="1.4"/>
+          <rect x="18" y="60" width="44" height="20" stroke="#eaeaea" fill="#fff"/>
+          <rect x="138" y="60" width="44" height="20" stroke="#eaeaea" fill="#fff"/>
+          <text x="40" y="73" text-anchor="middle" font-family="Geist Mono" font-size="9" fill="#595959">Design</text>
+          <text x="160" y="73" text-anchor="middle" font-family="Geist Mono" font-size="9" fill="#595959">Doc</text>
+        </svg>
+        <div class="mt-1 border border-hair px-2.5 py-2 flex items-center gap-2 text-[12px] mono">
+          <span class="text-ink-muted">Merge</span>
+          <span class="text-ink-2">fan-in → 1</span>
+          <span class="ml-auto text-accent">join</span>
+        </div>
+      </div>
+
+      <!-- REAL-TIME STATES -->
+      <div class="cell" style="grid-column:span 4;">
+        <span class="eyebrow">real-time status</span>
+        <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2.5 text-[13px]">
+          <span class="inline-flex items-center gap-2 mono"><span class="dot dot-idle"></span> idle</span>
+          <span class="inline-flex items-center gap-2 mono"><span class="dot dot-run pulse-run"></span> running</span>
+          <span class="inline-flex items-center gap-2 mono"><span class="dot dot-done"></span> done</span>
+          <span class="inline-flex items-center gap-2 mono"><span class="dot dot-paused"></span> paused</span>
+          <span class="inline-flex items-center gap-2 mono"><span class="dot dot-error"></span> error</span>
+        </div>
+        <p class="mt-4 text-[13px] text-ink-body leading-relaxed">Every node reports state as it runs. Edges animate while data flows downstream.</p>
+      </div>
+
+      <!-- ANALYTICS — node-delegated cost tracking -->
+      <div class="cell" style="grid-column:span 12;">
+        <div class="flex items-center justify-between">
+          <span class="eyebrow">analytics · node-delegated cost</span>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> this run</span>
+        </div>
+        <p class="mt-3 text-[13px] text-ink-body leading-relaxed max-w-xl">Each node meters its <span class="text-ink-2">own</span> tokens and spend. The canvas rolls every node up into the dashboard total — per-node accounting on the left, per-model on the right.</p>
+
+        <div class="anly-grid mt-5">
+          <!-- PER-NODE delegated rows -->
+          <div class="anly-panel">
+            <div class="anly-head"><span class="anly-cap">per node</span><span class="anly-cap-r">cost</span></div>
+            <div class="anly-rows">
+              <div class="anly-row"><span class="dot dot-done"></span><span class="anly-node">Investigate</span><span class="anly-tok">12.4k tok</span><span class="anly-cost">$0.04</span></div>
+              <div class="anly-row"><span class="dot dot-done"></span><span class="anly-node">Plan</span><span class="anly-tok">6.1k tok</span><span class="anly-cost">$0.02</span></div>
+              <div class="anly-row"><span class="dot dot-done"></span><span class="anly-node">Create</span><span class="anly-tok">38.7k tok</span><span class="anly-cost">$0.11</span></div>
+              <div class="anly-row"><span class="dot dot-done"></span><span class="anly-node">Design</span><span class="anly-tok">9.8k tok</span><span class="anly-cost">$0.05</span></div>
+              <div class="anly-row"><span class="dot dot-run pulse-run"></span><span class="anly-node">Review</span><span class="anly-tok">2.3k tok</span><span class="anly-cost">$0.01</span></div>
+            </div>
+            <div class="anly-total"><span class="anly-node">rolled up</span><span class="anly-tok">69.3k tok</span><span class="anly-cost">$0.23</span></div>
+          </div>
+
+          <!-- PER-MODEL breakdown -->
+          <div class="anly-panel">
+            <div class="anly-head"><span class="anly-cap">per model</span><span class="anly-cap-r">share</span></div>
+            <div class="anly-rows">
+              <div class="anly-mrow">
+                <div class="anly-mtop"><span class="anly-node">gpt-4o</span><span class="anly-cost">$0.13</span></div>
+                <div class="anly-bar"><span style="width:57%"></span></div>
+              </div>
+              <div class="anly-mrow">
+                <div class="anly-mtop"><span class="anly-node">claude-opus</span><span class="anly-cost">$0.07</span></div>
+                <div class="anly-bar"><span style="width:30%"></span></div>
+              </div>
+              <div class="anly-mrow">
+                <div class="anly-mtop"><span class="anly-node">llama-70b · local</span><span class="anly-cost">$0.03</span></div>
+                <div class="anly-bar"><span style="width:13%"></span></div>
+              </div>
+            </div>
+            <a href="features/analytics.html" class="link-arrow mt-auto pt-3 text-[12px]">Open analytics
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ AGENTIC STREAMING (flagship — deploy 20 agents on one task) ============ -->
+<section id="streaming" class="border-y border-hair bg-white relative overflow-hidden">
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(99,91,255,0.06), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-16 md:py-24">
+    <!-- Header -->
+    <div class="max-w-3xl reveal">
+      <span class="eyebrow">agentic streaming</span>
+      <h2 class="h2 mt-3">Deploy 20 agents on one task.</h2>
+      <p class="lead mt-4 max-w-2xl">Fan a single task out across twenty agents. They run in parallel, stream their work live, and converge into one synthesized result — minutes, not hours.</p>
+      <div class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 mono text-[13px] text-ink-muted">
+        <span class="flex items-center gap-2"><span class="dot dot-run pulse-run"></span> 20 agents</span>
+        <span class="text-hair">·</span>
+        <span>1 task</span>
+        <span class="text-hair">·</span>
+        <span>parallel</span>
+        <span class="text-hair">·</span>
+        <span class="text-ink-2">minutes, not hours</span>
+      </div>
+    </div>
+
+    <!-- Showpiece: source task → 20 streaming lanes → synthesized result -->
+    <div class="stream-stage mt-10 border border-hair bg-white reveal" id="streamStage" style="transition-delay:.06s">
+      <!-- top bar -->
+      <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-11">
+        <span class="eyebrow">parallel fan-out</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="streamStatus"><span class="dot dot-idle"></span> idle</span>
+      </div>
+
+      <div class="p-4 sm:p-6">
+        <!-- SOURCE TASK -->
+        <div class="flex justify-center">
+          <div class="node justify-center w-full max-w-[420px]" id="streamSource">
+            <span class="dot dot-run pulse-run"></span>
+            <span class="nlabel">Refactor &amp; harden the auth layer</span>
+            <span class="ml-auto mono text-[11px] text-accent">task</span>
+          </div>
+        </div>
+
+        <!-- fan-out connector -->
+        <div class="stream-fan" aria-hidden="true">
+          <svg viewBox="0 0 1000 56" preserveAspectRatio="none" class="w-full h-[40px] md:h-[48px]">
+            <path class="stream-fan-line" d="M500,0 C500,28 80,18 80,56"/>
+            <path class="stream-fan-line" d="M500,0 C500,28 260,20 260,56"/>
+            <path class="stream-fan-line" d="M500,0 C500,30 500,26 500,56"/>
+            <path class="stream-fan-line" d="M500,0 C500,28 740,20 740,56"/>
+            <path class="stream-fan-line" d="M500,0 C500,28 920,18 920,56"/>
+          </svg>
+        </div>
+
+        <!-- 20 AGENT LANES -->
+        <div class="stream-grid" id="streamGrid" role="list" aria-label="20 parallel agents"></div>
+
+        <!-- merge connector -->
+        <div class="stream-fan stream-fan-up" aria-hidden="true">
+          <svg viewBox="0 0 1000 56" preserveAspectRatio="none" class="w-full h-[40px] md:h-[48px]">
+            <path class="stream-fan-line" d="M80,0 C80,38 500,28 500,56"/>
+            <path class="stream-fan-line" d="M260,0 C260,36 500,30 500,56"/>
+            <path class="stream-fan-line" d="M500,0 C500,30 500,30 500,56"/>
+            <path class="stream-fan-line" d="M740,0 C740,36 500,30 500,56"/>
+            <path class="stream-fan-line" d="M920,0 C920,38 500,28 500,56"/>
+          </svg>
+        </div>
+
+        <!-- SYNTHESIZED RESULT -->
+        <div class="flex justify-center">
+          <div class="node justify-center w-full max-w-[420px]" id="streamResult">
+            <span class="dot dot-idle" id="streamResultDot"></span>
+            <span class="nlabel" id="streamResultLabel">Synthesized result</span>
+            <span class="ml-auto mono text-[11px] text-ink-muted" id="streamResultMeta">merge · 20 → 1</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- footer: link to feature page -->
+      <a href="features/agentic-streaming.html" class="stream-cta flex items-center justify-between border-t border-hair px-4 sm:px-5 h-12 mono text-[12px] text-ink-body hover:bg-[#fafafa] transition-colors">
+        <span>How fan-out, streaming &amp; synthesis work</span>
+        <span class="link-arrow text-[12px]">open feature
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MODEL PROMPT (flagship — prompt → self-assembling graph) ============ -->
+<section id="model-prompt" class="border-b border-hair bg-[#fafafa] relative overflow-hidden">
+  <div class="absolute inset-0 grid-tex opacity-[0.3] pointer-events-none" aria-hidden="true"></div>
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(14,165,164,0.07), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-16 md:py-24">
+    <!-- Header -->
+    <div class="max-w-3xl reveal">
+      <div class="flex items-center gap-3">
+        <span class="eyebrow teal">model prompt</span>
+        <span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span>
+      </div>
+      <h2 class="h2 mt-3">Describe it. Watch the graph build itself.</h2>
+      <p class="lead mt-4 max-w-2xl">Model-driven prompting that generates a whole node graph from a single prompt — prompt&nbsp;→&nbsp;graph, fully model-controlled. It keeps its own live read of the canvas: deciding which nodes to place, how to wire them, and which model and tools each node gets — adapting as the graph grows.</p>
+      <div class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 mono text-[13px] text-ink-muted">
+        <span class="flex items-center gap-2"><span class="dot dot-test"></span> prompt → graph</span>
+        <span class="text-hair">·</span><span>model-controlled</span>
+        <span class="text-hair">·</span><span>live canvas read</span>
+        <span class="text-hair">·</span><span class="text-ink-2">self-assembling</span>
+      </div>
+    </div>
+
+    <!-- Showpiece: prompt line → self-assembling graph on a dotted stage -->
+    <div class="mp-flag mt-10 border border-hair bg-white reveal" id="mpFlag" style="transition-delay:.06s">
+      <!-- top bar -->
+      <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-11">
+        <span class="eyebrow">prompt → graph</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2" id="mpfStatus"><span class="dot dot-idle"></span> ready</span>
+      </div>
+
+      <div class="mp-flag-body">
+        <!-- LEFT: prompt line + reasoning stream -->
+        <div class="mp-flag-left">
+          <span class="eyebrow">your prompt</span>
+          <div class="mp-flag-prompt mt-3" aria-label="The prompt the model builds from">
+            <span class="text-ink-muted">›</span> <span id="mpfPrompt"></span><span class="mp-flag-caret" id="mpfCaret" aria-hidden="true"></span>
+          </div>
+
+          <!-- pick-a-prompt chips -->
+          <div class="mp-flag-chips mt-4" id="mpfChips" role="group" aria-label="Pick a prompt">
+            <button class="mpf-chip on" data-prompt="0" aria-pressed="true"><span class="mpf-chip-dot"></span>Research 3 competitors and draft a one-page brief.</button>
+            <button class="mpf-chip" data-prompt="1" aria-pressed="false"><span class="mpf-chip-dot"></span>Refactor the auth layer, document it, and review.</button>
+            <button class="mpf-chip" data-prompt="2" aria-pressed="false"><span class="mpf-chip-dot"></span>Summarise these docs, then fact-check the summary.</button>
+          </div>
+
+          <div class="mp-flag-reason mt-5">
+            <div class="eyebrow mb-2.5">model reasoning</div>
+            <div class="mpf-log" id="mpfLog" aria-live="polite"></div>
+          </div>
+
+          <a href="features/model-prompt.html" class="link-arrow mt-5 text-[13px]">
+            See how Model Prompt works
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+
+        <!-- RIGHT: the self-assembling graph stage -->
+        <div class="mp-flag-stagewrap">
+          <div class="flex items-center justify-between px-4 h-10 border-b border-hair bg-white">
+            <span class="mono text-[12px] text-ink-2">canvas · model-built</span>
+            <span class="mono text-[11px] text-ink-muted" id="mpfStats">0 nodes · 0 edges</span>
+          </div>
+          <div class="mpf-stage" id="mpfStage" aria-label="A node graph the model assembles from the prompt">
+            <svg class="mpf-edges" id="mpfEdges" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <div id="mpfNodes"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURE DIRECTORY — dense clickable cards → feature pages ============ -->
+<section id="features" class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">everything, in one place</span>
+      <h2 class="h2 mt-3">Nineteen capabilities. One canvas.</h2>
+      <p class="lead mt-4">Every feature is a node, a surface, or a switch on the same graph. Open any tile to go deeper.</p>
+    </div>
+
+    <!-- CLUSTER: one cohesive bordered surface wrapping every labelled group -->
+    <div class="feat-cluster mt-10 reveal" id="featCluster">
+
+    <!-- GROUP: ORCHESTRATION -->
+    <div class="feat-group">
+      <div class="feat-grouphead"><span class="eyebrow">orchestration</span><span class="feat-rule"></span></div>
+      <div class="feat-grid">
+        <a href="features/agentic-streaming.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">flagship</span></div>
+          <h3 class="feat-title">Agentic Streaming</h3>
+          <p class="feat-desc">Deploy 20 agents on one task — parallel, streamed, synthesized.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/advanced-orchestration.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">control</span></div>
+          <h3 class="feat-title">Advanced Orchestration</h3>
+          <p class="feat-desc">Branch, retry, cap concurrency, loop, nest, gate, timeout.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/canvas-planning.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span><span class="feat-tag">planning</span></div>
+          <h3 class="feat-title">Canvas Planning</h3>
+          <p class="feat-desc">Lay out goals, phases, and milestones right on the graph.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/testing-nodes.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span><span class="feat-tag">assertions</span></div>
+          <h3 class="feat-title">Testing Pipeline Nodes</h3>
+          <p class="feat-desc">Drop test nodes into the chain and assert on any output.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- GROUP: MODELS -->
+    <div class="feat-group">
+      <div class="feat-grouphead"><span class="eyebrow">models</span><span class="feat-rule"></span></div>
+      <div class="feat-grid">
+        <a href="features/model-hotswap.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">per node</span></div>
+          <h3 class="feat-title">Model Hotswapping</h3>
+          <p class="feat-desc">Set provider + model per node and swap live, mid-run.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/local-models.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">offline</span></div>
+          <h3 class="feat-title">Local Models</h3>
+          <p class="feat-desc">Ollama, llama.cpp, LM Studio — fully local, alongside the cloud.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/models-md-directive.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">MODELS.md</span></div>
+          <h3 class="feat-title">Directive Model Control</h3>
+          <p class="feat-desc">One version-controlled file governs every model on the canvas.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/subscription-models.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span><span class="feat-tag">via MCP</span></div>
+          <h3 class="feat-title">Subscription Models</h3>
+          <p class="feat-desc">Wire non-API subscription models straight into nodes via MCP.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- GROUP: KNOWLEDGE & EXTENSIBILITY -->
+    <div class="feat-group">
+      <div class="feat-grouphead"><span class="eyebrow">knowledge + extensibility</span><span class="feat-rule"></span></div>
+      <div class="feat-grid">
+        <a href="features/rag.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span><span class="feat-tag">retrieval</span></div>
+          <h3 class="feat-title">Node-based RAG</h3>
+          <p class="feat-desc">Embed → search → top-k → context, wired in like any other node.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/skills-as-nodes.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">community</span></div>
+          <h3 class="feat-title">Skills-as-Nodes</h3>
+          <p class="feat-desc">Publish a skill; it becomes a node anyone can drop on the canvas.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/mcp-integrations.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span><span class="feat-tag">MCP</span></div>
+          <h3 class="feat-title">MCP + Integrations</h3>
+          <p class="feat-desc">Roblox, Linear, Notion, Vercel, Safentic, Netlify — and more.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/model-prompt.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-test"><span class="sdot"></span>Testing</span><span class="feat-tag">prompt → graph</span></div>
+          <h3 class="feat-title">Model Prompt</h3>
+          <p class="feat-desc">Model-driven prompting that generates whole node graphs — its own live read of the canvas.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- GROUP: INTERFACE & CONTROL -->
+    <div class="feat-group">
+      <div class="feat-grouphead"><span class="eyebrow">interface + control</span><span class="feat-rule"></span></div>
+      <div class="feat-grid">
+        <a href="features/voice-control.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">VoiceOrb</span></div>
+          <h3 class="feat-title">Agentic Voice Control</h3>
+          <p class="feat-desc">Talk to your canvas — it edits the graph as you describe it.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/terminal-cli.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">CLI</span></div>
+          <h3 class="feat-title">Inbuilt Terminal</h3>
+          <p class="feat-desc">run, stop, retry, stream logs — a real CLI inside the canvas.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/multiplayer-collab.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">LAN</span></div>
+          <h3 class="feat-title">Local-network Collaboration</h3>
+          <p class="feat-desc">Name-tagged cursors, inline comments, live node-wiring — no cloud.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/analytics.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span><span class="feat-tag">usage</span></div>
+          <h3 class="feat-title">Analytics</h3>
+          <p class="feat-desc">Tokens and spend across every provider and local model.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- GROUP: INFRASTRUCTURE -->
+    <div class="feat-group">
+      <div class="feat-grouphead"><span class="eyebrow">infrastructure</span><span class="feat-rule"></span></div>
+      <div class="feat-grid">
+        <a href="features/rapid-pod-deployments.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-plan"><span class="sdot"></span>Planning</span><span class="feat-tag">RunPod GPU</span></div>
+          <h3 class="feat-title">Rapid Pod Deployments</h3>
+          <p class="feat-desc">Ship a canvas to a GPU pod serving a 70B-class model.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/secure-local.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-active"><span class="sdot"></span>Active</span><span class="feat-tag">local-first</span></div>
+          <h3 class="feat-title">Secure-first / Fully Local</h3>
+          <p class="feat-desc">Self-hosted, no telemetry, no cloud — air-gap friendly.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="features/git-backed-canvas.html" class="feat-card">
+          <div class="feat-top"><span class="feat-status feat-status-dev"><span class="sdot"></span>In development</span><span class="feat-tag">versioned</span></div>
+          <h3 class="feat-title">Git-backed Canvas</h3>
+          <p class="feat-desc">Every workflow is a file — commit, diff, and review like code.</p>
+          <span class="feat-open">open<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="feat-card feat-card-accent">
+          <div class="feat-top"><span class="dot is-round" style="background:#635bff"></span><span class="feat-tag" style="color:#635bff;border-color:#635bff66">MIT</span></div>
+          <h3 class="feat-title">Open source · build your own</h3>
+          <p class="feat-desc">Fork the runtime, write a skill, add a node type. Yours to own.</p>
+          <span class="feat-open">view source<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg></span>
+        </a>
+      </div>
+    </div>
+
+    </div><!-- /feat-cluster -->
+  </div>
+</section>
+
+<!-- ============ LOCAL-NETWORK COLLABORATION (compact teaser → feature page) ============ -->
+<section id="collab" class="border-b border-hair bg-white relative overflow-hidden">
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 55% at 50% 0%, rgba(99,91,255,0.05), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="grid lg:grid-cols-[0.85fr_1.15fr] gap-10 lg:gap-14 items-center">
+      <!-- copy -->
+      <div class="reveal">
+        <span class="eyebrow">local-network collaboration</span>
+        <h2 class="h2 mt-3">Your whole team, one live canvas.</h2>
+        <p class="lead mt-4">Real-time over your LAN. Name-tagged cursors, inline comments, and live node-wiring stream instantly between everyone. No cloud, no account, nothing leaves your network.</p>
+        <div class="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 mono text-[12px] text-ink-muted">
+          <span class="flex items-center gap-2"><span class="dot dot-run pulse-run"></span> named cursors</span>
+          <span class="text-hair">·</span><span>inline comments</span>
+          <span class="text-hair">·</span><span>live wiring</span>
+          <span class="text-hair">·</span><span class="text-ink-2">local-first</span>
+        </div>
+        <a href="features/multiplayer-collab.html" class="link-arrow mt-6">
+          Explore live collaboration
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+        </a>
+      </div>
+
+      <!-- Stage: dotted grid + roaming cursors + node cards + a live comment -->
+      <a href="features/multiplayer-collab.html" class="collab-stage block mt-2 border border-hair reveal" id="collabStage" style="transition-delay:.06s">
+        <!-- top bar -->
+        <div class="flex items-center justify-between border-b border-hair px-4 sm:px-5 h-11 bg-white">
+          <span class="eyebrow">shared canvas · lan</span>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> 4 connected</span>
+        </div>
+
+        <!-- canvas surface -->
+        <div class="collab-canvas" id="collabCanvas">
+          <!-- node cards for context -->
+          <div class="collab-node" style="left:7%;top:18%;width:170px;" data-cnode>
+            <span class="dot dot-done"></span><span class="nlabel">Investigate</span>
+            <span class="ml-auto mono text-[11px] text-ink-muted">web_search</span>
+          </div>
+          <div class="collab-node" style="left:58%;top:22%;width:160px;" data-cnode>
+            <span class="dot dot-run"></span><span class="nlabel">Plan</span>
+            <span class="ml-auto mono text-[11px] text-ink-muted">opus</span>
+          </div>
+          <div class="collab-node" style="left:30%;top:64%;width:170px;" data-cnode>
+            <span class="dot dot-idle"></span><span class="nlabel">Create</span>
+            <span class="ml-auto mono text-[11px] text-ink-muted">draft</span>
+          </div>
+          <div class="collab-node" style="left:68%;top:68%;width:150px;" data-cnode>
+            <span class="dot dot-idle"></span><span class="nlabel">Review</span>
+            <span class="ml-auto mono text-[11px] text-ink-muted">gate</span>
+          </div>
+
+          <!-- inline comment bubble (collab upgrade) -->
+          <div class="collab-comment" style="left:60%;top:40%;--cc:#0ea5a4;" aria-hidden="true">
+            <span class="collab-comment-tag">kai</span>
+            <span class="collab-comment-body">wire Plan → Create?</span>
+          </div>
+
+          <!-- live cursors (positions set by rAF; static fallback via inline left/top) -->
+          <div class="collab-cursor" id="cur-ana" style="left:22%;top:30%;--cc:#635bff;">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+            <span class="collab-tag">ana</span>
+          </div>
+          <div class="collab-cursor" id="cur-kai" style="left:62%;top:40%;--cc:#0ea5a4;">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+            <span class="collab-tag">kai</span>
+          </div>
+          <div class="collab-cursor" id="cur-sam" style="left:40%;top:52%;--cc:#e0851b;">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+            <span class="collab-tag">sam</span>
+          </div>
+          <div class="collab-cursor" id="cur-you" style="left:50%;top:38%;--cc:#171717;">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 2l5 13 2.2-5.4L14.6 7 2 2z" fill="currentColor"/></svg>
+            <span class="collab-tag">you</span>
+          </div>
+        </div>
+
+        <!-- footer stat line -->
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-hair px-4 sm:px-5 h-11 bg-white mono text-[12px] text-ink-muted">
+          <span>peers: ana · kai · sam · you</span>
+          <span class="text-hair">·</span>
+          <span>192.168.1.0/24</span>
+          <span class="text-hair">·</span>
+          <span class="text-ink-2 flex items-center gap-2"><span class="dot dot-run pulse-run"></span> syncing</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VOICE CONTROL (compact; Review node contained inside its card) ============ -->
+<section id="voice" class="border-b border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-16 md:py-20">
+    <div class="max-w-2xl reveal">
+      <span class="eyebrow">voice control</span>
+      <h2 class="h2 mt-3">Talk to your canvas.</h2>
+      <p class="lead mt-4">A particle VoiceOrb listens, thinks, and speaks — editing the graph as you describe it. Watch it react.</p>
+    </div>
+
+    <div class="mt-10 grid lg:grid-cols-2 gap-px bg-hair border border-hair reveal">
+      <!-- ORB (on #fff for contrast against #fafafa band) -->
+      <div class="bg-white p-7 relative" style="min-height:340px;">
+        <canvas id="orb-canvas" class="absolute inset-0 w-full h-full block" aria-hidden="true"></canvas>
+        <div id="voiceOrbFallback" class="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 w-40 h-40" aria-hidden="true"
+             style="background:radial-gradient(circle at 40% 35%, #4c8bff, #635bff 70%);opacity:.85;"></div>
+        <div class="relative z-10 flex flex-wrap gap-2" id="voiceChips" role="group" aria-label="VoiceOrb states">
+          <button class="vchip active" data-state="idle">idle</button>
+          <button class="vchip" data-state="listening">listening</button>
+          <button class="vchip" data-state="thinking">thinking</button>
+          <button class="vchip" data-state="speaking">speaking</button>
+        </div>
+        <p class="sr-only" id="orbStatus" aria-live="polite">VoiceOrb state: idle — a gentle breathing sphere.</p>
+        <p class="sr-only">The VoiceOrb has four states. Idle: a gentle breathing sphere. Listening: the surface ripples toward your cursor as it captures speech. Thinking: turbulent high-frequency motion while it plans the edit. Speaking: rhythmic pulses in blue and accent as it responds and applies the change.</p>
+      </div>
+      <!-- TRANSCRIPT + MINI CANVAS -->
+      <div class="bg-white p-7 flex flex-col">
+        <span class="eyebrow">transcript</span>
+        <div class="mt-4 border border-hair" role="log" aria-label="Voice transcript">
+          <!-- USER row -->
+          <div class="flex gap-3 px-4 py-3 border-b border-hair">
+            <span class="mono text-[10px] tracking-[0.14em] text-ink-muted uppercase pt-0.5 w-[68px] shrink-0">user</span>
+            <p class="text-[13.5px] leading-[1.6] text-ink-2 min-h-[1.6em]"><span id="voiceTranscript"></span><span class="caret" id="voiceCaret"></span></p>
+          </div>
+          <!-- DISPATCH row -->
+          <div class="flex gap-3 px-4 py-3">
+            <span class="mono text-[10px] tracking-[0.14em] text-accent uppercase pt-0.5 w-[68px] shrink-0">dispatch</span>
+            <p class="text-[13.5px] leading-[1.6] text-ink-body">Added a <span class="text-ink-2">Review</span> node after <span class="text-ink-2">Investigate</span> and wired the edge.</p>
+          </div>
+        </div>
+        <!-- mini canvas: overflow-hidden + bounded height so the ghost Review node is CONTAINED -->
+        <div class="voice-mini mt-5 flex-1 border border-hair grid-tex relative overflow-hidden p-5" style="min-height:172px;max-height:200px;">
+          <svg class="absolute left-5 top-0 w-px h-full pointer-events-none" viewBox="0 0 2 200" preserveAspectRatio="none">
+            <path id="ghostEdge" d="M1,64 L1,96" stroke="#635bff" stroke-width="2" fill="none" stroke-dasharray="40" stroke-dashoffset="40" style="opacity:0;transition:opacity .35s"/>
+          </svg>
+          <div class="node w-[180px] max-w-[calc(100%-2.5rem)] relative z-10"><span class="dot dot-done"></span><span class="nlabel">Investigate</span></div>
+          <div id="ghostNode" class="node w-[180px] max-w-[calc(100%-2.5rem)] absolute left-5 top-[96px] z-10" style="opacity:0;transform:translateY(8px);transition:opacity .4s var(--ease-out),transform .4s var(--ease-out);border-color:#635bff;">
+            <span class="dot dot-run"></span><span class="nlabel">Review</span>
+            <span class="ml-auto mono text-[10px] text-accent">+ added</span>
+          </div>
+        </div>
+        <a href="features/voice-control.html" class="link-arrow mt-5 text-[13px]">
+          Explore voice control
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RAPID POD DEPLOYMENTS — FLAGSHIP PENDING / UPCOMING SECTION ============ -->
+<section id="deploy" class="border-b border-hair bg-white relative overflow-hidden">
+  <div class="absolute inset-0 grid-tex opacity-[0.35] pointer-events-none" aria-hidden="true"></div>
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+       style="background:radial-gradient(70% 60% at 50% 0%, rgba(99,91,255,0.08), transparent 70%);"></div>
+
+  <div class="relative max-w-content mx-auto px-6 py-20 md:py-28">
+    <!-- Header — UPCOMING framing, prominent -->
+    <div class="max-w-3xl reveal">
+      <div class="flex items-center gap-3">
+        <span class="eyebrow">rapid pod deployments</span>
+        <span class="soon">upcoming</span>
+        <span class="soon" style="color:#635bff;border-color:#635bff66">flagship</span>
+      </div>
+      <h2 class="h2 mt-3">Ship your orchestration to a GPU. Out of the box.</h2>
+      <p class="lead mt-4 max-w-2xl">Deploy a whole canvas onto a GPU pod with one command. Via RunPod, DISPATCH provisions the hardware and serves a multi-billion-parameter, 70B-class model out of the box — your chain runs in minutes, no infra to wire up. Landing soon.</p>
+      <div class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 mono text-[13px] text-ink-muted">
+        <span class="flex items-center gap-2"><span class="dot dot-run pulse-run"></span> runpod</span>
+        <span class="text-hair">·</span><span>GPU pod</span>
+        <span class="text-hair">·</span><span>70B served</span>
+        <span class="text-hair">·</span><span class="text-ink-2">out of the box</span>
+      </div>
+    </div>
+
+    <!-- Showpiece: deploy command → pod card -->
+    <div class="mt-10 grid lg:grid-cols-[1.4fr_1fr] gap-6 reveal" style="transition-delay:.06s">
+      <!-- deploy card -->
+      <div class="border border-hair bg-white">
+        <div class="flex items-center justify-between border-b border-hair px-5 h-11">
+          <span class="eyebrow">deploy</span>
+          <span class="mono text-[12px] text-ink-muted flex items-center gap-2"><span class="dot dot-run pulse-run"></span> provisioning</span>
+        </div>
+        <div class="p-5 sm:p-6">
+          <!-- one-line command, plain mono -->
+          <div class="border border-hair bg-[#fafafa] px-4 py-3 mono text-[13px] text-ink-2 overflow-x-auto whitespace-nowrap">
+            <span class="text-ink-muted">$</span> dispatch deploy --pod
+          </div>
+          <!-- provisioning steps -->
+          <div class="mt-4 grid gap-2 mono text-[12px]">
+            <div class="flex items-center gap-2.5"><span class="dot dot-done"></span><span class="text-ink-body">canvas packaged</span><span class="ml-auto text-st-done">done</span></div>
+            <div class="flex items-center gap-2.5"><span class="dot dot-done"></span><span class="text-ink-body">runpod · A100 80GB acquired</span><span class="ml-auto text-st-done">done</span></div>
+            <div class="flex items-center gap-2.5"><span class="dot dot-run pulse-run"></span><span class="text-ink-body">serving 70B model</span><span class="ml-auto text-accent">live</span></div>
+            <div class="flex items-center gap-2.5"><span class="dot dot-idle"></span><span class="text-ink-muted">endpoint → orchestration</span><span class="ml-auto text-ink-muted">queued</span></div>
+          </div>
+          <a href="features/rapid-pod-deployments.html" class="link-arrow mt-5 text-[13px]">
+            See how pod deployment works
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- pod spec card -->
+      <div class="border border-hair bg-white p-6 flex flex-col">
+        <span class="eyebrow">pod</span>
+        <div class="mt-5 node">
+          <span class="dot dot-run pulse-run"></span><span class="nlabel">GPU pod</span>
+          <span class="ml-auto mono text-[11px] text-accent">runpod</span>
+        </div>
+        <div class="mt-4 grid gap-px bg-hair border border-hair mono text-[12px]">
+          <div class="bg-white px-3 py-2.5 flex items-center justify-between"><span class="text-ink-muted">gpu</span><span class="text-ink-2">A100 80GB</span></div>
+          <div class="bg-white px-3 py-2.5 flex items-center justify-between"><span class="text-ink-muted">model</span><span class="text-ink-2">70B-class</span></div>
+          <div class="bg-white px-3 py-2.5 flex items-center justify-between"><span class="text-ink-muted">provider</span><span class="text-ink-2">runpod</span></div>
+          <div class="bg-white px-3 py-2.5 flex items-center justify-between"><span class="text-ink-muted">status</span><span class="text-st-done">served</span></div>
+        </div>
+        <p class="mt-5 mono text-[11px] text-ink-muted">pod: A100 80GB · runpod · 70B served</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ END CTA — boxed, alive closing moment ============
+     Concept: a bordered SQUARE panel that reads as a live DISPATCH canvas.
+     Dotted-grid backdrop + cursor-reactive accent spotlight + parallax.
+     Focal ledger: 250 API credits BURN down on reveal, beside a stat row
+     (17 · 1 week · MIT). A mini node-chain runs a signal current down its
+     edges. Magnetic GitHub button. All animation IO-gated + RM-safe. -->
+<section class="border-t border-hair bg-[#fafafa]">
+  <div class="max-w-content mx-auto px-6 py-20 md:py-28">
+    <div class="cta-panel reveal" id="ctaPanel">
+      <!-- backdrops -->
+      <div class="cta-tex" aria-hidden="true"></div>
+      <div class="cta-glow" aria-hidden="true"></div>
+
+      <!-- top rail: reads like a canvas header -->
+      <div class="cta-rail" aria-hidden="true">
+        <span class="eyebrow">a note from the maker</span>
+        <span class="mono text-[12px] text-ink-muted flex items-center gap-2">
+          <span class="dot dot-run pulse-run"></span> phase-3 · live
+        </span>
+      </div>
+
+      <div class="cta-body">
+        <!-- LEFT: the story + actions -->
+        <div class="cta-left">
+          <h2 class="cta-head">
+            Built by one 17&#8209;year&#8209;old.<br>
+            <span class="cta-head-accent">Open&#8209;sourced so it can go further.</span>
+          </h2>
+          <p class="cta-sub">
+            One week into an accelerator, ~$250 in API credits deep into testing, it clicked:
+            DISPATCH can redefine the messy part of agentic orchestration — where many
+            agents hand off, gate, and converge on real work. Testing that at API prices
+            is expensive, so it's MIT and open. Any help genuinely moves it forward.
+          </p>
+
+          <!-- stat row -->
+          <div class="cta-stats" aria-hidden="true">
+            <div class="cta-stat">
+              <span class="cta-stat-n">17</span>
+              <span class="cta-stat-l">solo maker, yrs old</span>
+            </div>
+            <div class="cta-stat">
+              <span class="cta-stat-n">1</span>
+              <span class="cta-stat-l">week in, it clicked</span>
+            </div>
+            <div class="cta-stat">
+              <span class="cta-stat-n">MIT</span>
+              <span class="cta-stat-l">licensed · yours to fork</span>
+            </div>
+          </div>
+
+          <div class="cta-actions">
+            <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-dark h-11 px-5 text-[15px]" id="ctaMagnet">
+              <svg id="ctaGlyph" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="transition:transform .2s var(--ease-out)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              <span id="ctaMagnetLabel">View on GitHub</span>
+            </a>
+            <a href="https://github.com/h1kv/dispatch-tooling" class="btn btn-ghost h-11 px-5 text-[15px]">Get started</a>
+          </div>
+        </div>
+
+        <!-- RIGHT: live ledger — credits burning + a running node-chain -->
+        <div class="cta-stage" id="ctaStage" aria-hidden="true">
+          <div class="cta-stage-head">
+            <span class="eyebrow">credits burned testing</span>
+            <span class="mono text-[11px] text-ink-muted" id="ctaStageMeta">metering…</span>
+          </div>
+
+          <!-- the burning number -->
+          <div class="cta-burn">
+            <span class="cta-burn-n"><span aria-hidden="true">$</span><span id="ctaBurnNum" data-burn="250">0</span></span>
+            <span class="cta-burn-unit">API credits</span>
+            <div class="cta-burn-bar"><span id="ctaBurnFill"></span></div>
+          </div>
+
+          <!-- mini running node-chain (signal current marches down edges) -->
+          <div class="cta-chain" id="ctaChain">
+            <svg class="cta-chain-edges" viewBox="0 0 60 220" preserveAspectRatio="none" aria-hidden="true">
+              <path class="cta-edge" d="M30,30 L30,90"/>
+              <path class="cta-edge" d="M30,110 L30,170"/>
+            </svg>
+            <div class="cta-cnode" data-i="0"><span class="dot dot-done"></span><span class="nlabel">Hand off</span></div>
+            <div class="cta-cnode" data-i="1"><span class="dot dot-done"></span><span class="nlabel">Gate</span></div>
+            <div class="cta-cnode" data-i="2"><span class="dot dot-run pulse-run"></span><span class="nlabel">Converge</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-hair bg-white">
+  <div class="max-w-content mx-auto px-6 py-14">
+    <div class="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10">
+      <div>
+        <a href="#top" class="flex items-center gap-2.5">
+          <span class="relative grid place-items-center w-7 h-7 border border-hair bg-white"><span class="w-2 h-2 bg-ink"></span><span class="absolute -right-0.5 -bottom-0.5 w-1.5 h-1.5 is-round bg-accent"></span></span>
+          <span class="font-mono text-[15px] font-medium tracking-tight text-ink-2">DISPATCH<span class="text-accent">.AI</span></span>
+        </a>
+        <p class="mt-4 text-[13.5px] text-ink-body max-w-xs leading-relaxed">The open-source visual canvas for building AI agent workflows.</p>
+        <a href="https://github.com/h1kv/dispatch-tooling" class="mt-5 btn btn-ghost">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span class="mono text-[13px]">h1kv/dispatch-tooling</span>
+        </a>
+        <!-- Backed by (footer credit, square) -->
+        <div class="mt-6">
+          <div class="foot-head mb-2.5">Backed by</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="foot-backer">Pyca Ireland</span>
+            <span class="foot-backer">Helios Labs</span>
+          </div>
+          <p class="mt-3 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+            Backed under the <span class="text-ink-2">Pyca Ireland</span> non-profit initiative for tech innovation to improve education — resources from the initiative are directed toward the research and development of the open-source DISPATCH.AI project.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <div class="foot-head mb-4">Product</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="#bento" class="hover:text-ink-2 transition-colors">Canvas</a></li>
+          <li><a href="#features" class="hover:text-ink-2 transition-colors">Features</a></li>
+          <li><a href="#streaming" class="hover:text-ink-2 transition-colors">Streaming</a></li>
+          <li><a href="#deploy" class="hover:text-ink-2 transition-colors">Pod deployments</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Open source</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">MIT license</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Source</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling/issues" class="hover:text-ink-2 transition-colors">Issues</a></li>
+          <li><a href="https://github.com/h1kv/dispatch-tooling" class="hover:text-ink-2 transition-colors">Contribute</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-head mb-4">Providers</div>
+        <ul class="space-y-2.5 text-[14px] text-ink-body">
+          <li><span>OpenAI</span></li>
+          <li><span>Anthropic</span></li>
+          <li><span>Google</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 pt-6 border-t border-hair flex flex-wrap items-center justify-between gap-4">
+      <span class="mono text-[12.5px] text-ink-muted">© 2026 DISPATCH.AI — MIT licensed</span>
+      <span class="mono text-[12.5px] text-ink-muted flex items-center gap-2"><span class="dot dot-done"></span> all systems flowing</span>
+    </div>
+  </div>
+</footer>
+
+<!-- Feature-cluster cursor spotlight: reuses the bento --mx/--my pattern,
+     touch + reduced-motion safe, no dependency on app.js (which stays valid). -->
+<script>
+(function(){
+  var cluster=document.getElementById('featCluster');
+  if(!cluster)return;
+  if(window.matchMedia('(hover: none)').matches)return;
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  var raf=null,mx=0,my=0;
+  cluster.addEventListener('pointermove',function(e){
+    var r=cluster.getBoundingClientRect();
+    mx=e.clientX-r.left;my=e.clientY-r.top;
+    if(!raf)raf=requestAnimationFrame(function(){
+      cluster.style.setProperty('--mx',mx+'px');
+      cluster.style.setProperty('--my',my+'px');
+      raf=null;
+    });
+  });
+})();
+</script>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
