@@ -6,7 +6,7 @@
 // Commands: start | dev | init | doctor | version | help
 // ─────────────────────────────────────────────────────────────────────────
 import { spawn } from "node:child_process";
-import { existsSync, copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -125,6 +125,58 @@ function cmdDoctor() {
   return ok ? 0 : 1;
 }
 
+// Where per-worktree canvas state lives — mirrors the server's resolution.
+function dispatchDir() {
+  return process.env.DISPATCH_WORKSPACE_STATE_DIR || path.join(process.cwd(), ".dispatch");
+}
+
+function blankWorkspaceState() {
+  return { version: 2, nodes: [], edges: [], planElements: "[]", chatMessages: [], savedAt: new Date().toISOString() };
+}
+
+function cmdWorkspace(rest, flags) {
+  const sub = rest[1] || "list";
+  const dir = dispatchDir();
+
+  if (sub === "list" || sub === "ls") {
+    if (!existsSync(dir)) { log(c("dim", `  no .dispatch/ here — run: dispatch workspace new <name>`)); return 0; }
+    const files = readdirSync(dir).filter((f) => f.endsWith(".json") && !f.includes(".tmp") && !f.endsWith(".bak"));
+    if (files.length === 0) { log(c("dim", "  no workspaces yet")); return 0; }
+    log(c("bold", `Workspaces in ${path.relative(process.cwd(), dir) || "."}/`));
+    for (const f of files) {
+      let meta = "";
+      try {
+        const s = JSON.parse(readFileSync(path.join(dir, f), "utf8"));
+        meta = c("dim", `  v${s.version ?? "?"} · ${Array.isArray(s.nodes) ? s.nodes.length : 0} nodes${s.savedAt ? ` · ${String(s.savedAt).slice(0, 10)}` : ""}`);
+      } catch { meta = c("red", "  (unreadable)"); }
+      log(`  ${c("accent", f.replace(/\.json$/, ""))}${meta}`);
+    }
+    return 0;
+  }
+
+  if (sub === "new" || sub === "create") {
+    const name = rest[2];
+    if (!name || !/^[A-Za-z0-9._-]+$/.test(name)) {
+      log(c("red", "  usage: dispatch workspace new <name>   (letters, digits, . _ - only)"));
+      return 1;
+    }
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${name}.json`);
+    if (existsSync(file) && !flags.force) {
+      log(c("yellow", `  ${name} already exists — pass --force to overwrite`));
+      return 1;
+    }
+    writeFileSync(file, JSON.stringify(blankWorkspaceState(), null, 2) + "\n");
+    log(c("green", `  ✓ created ${path.relative(process.cwd(), file)}`));
+    log(c("dim", `  open it with: dispatch start   then join workspace "${name}"`));
+    return 0;
+  }
+
+  log(c("red", `  unknown workspace subcommand: ${sub}\n`));
+  log(c("dim", "  dispatch workspace list | new <name> [--force]"));
+  return 1;
+}
+
 function cmdHelp() {
   const { version } = pkg();
   log(`
@@ -136,6 +188,7 @@ ${c("bold", "Usage")}
 ${c("bold", "Commands")}
   ${c("accent", "start")}            Start the app (dev server)         ${c("dim", "[--port N] [--prod]")}
   ${c("accent", "init")}             Scaffold .env + workspace dirs
+  ${c("accent", "workspace")}        Manage .dispatch/ canvases       ${c("dim", "list | new <name>")}
   ${c("accent", "doctor")}           Check your environment is ready
   ${c("accent", "version")}          Print the version
   ${c("accent", "help")}             Show this help
@@ -159,6 +212,7 @@ async function main() {
     case "start": code = await cmdStart(flags); break;
     case "dev": code = await cmdStart({ ...flags, prod: false }); break;
     case "init": code = cmdInit(); break;
+    case "workspace": case "ws": code = cmdWorkspace(rest, flags); break;
     case "doctor": code = cmdDoctor(); break;
     case "version": log(pkg().version); break;
     case "help": cmdHelp(); break;

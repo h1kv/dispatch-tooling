@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 // @ts-expect-error — the CLI is plain ESM JS with no type declarations.
 import { parseFlags } from "../bin/dispatch.mjs";
+import {
+  hydrateWorkspaceState,
+  resetWorkspaceForTests,
+  setWorkspaceStateFileForTests,
+} from "../server/features/state/store.js";
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "dispatch.mjs");
 
@@ -28,4 +35,19 @@ test("cli help lists the core commands", () => {
 
 test("cli rejects an unknown command with a non-zero exit", () => {
   assert.throws(() => execFileSync("node", [CLI, "definitely-not-a-command"], { stdio: "pipe" }));
+});
+
+test("cli workspace new creates a v2 state file the server can hydrate", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "dispatch-ws-"));
+  execFileSync("node", [CLI, "workspace", "new", "demo"], {
+    env: { ...process.env, DISPATCH_WORKSPACE_STATE_DIR: dir },
+    stdio: "pipe",
+  });
+  const file = path.join(dir, "demo.json");
+  assert.equal(existsSync(file), true);
+
+  // The file the CLI wrote must be loadable by the real store.
+  resetWorkspaceForTests();
+  setWorkspaceStateFileForTests(file);
+  assert.equal(hydrateWorkspaceState(), true);
 });

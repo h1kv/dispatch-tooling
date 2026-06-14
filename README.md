@@ -97,6 +97,7 @@ A dependency-free CLI ships with the project (`bin/dispatch.mjs`):
 | --- | --- |
 | `dispatch start [--port N] [--prod]` | Start the app (dev, or a production build). |
 | `dispatch init` | Scaffold `.env` + workspace dirs. |
+| `dispatch workspace list` / `new <name>` | List or scaffold `.dispatch/` canvases (per worktree). |
 | `dispatch doctor` | Check your environment is ready to run. |
 | `dispatch version` / `dispatch help` | Version / usage. |
 
